@@ -1,0 +1,9 @@
+* text=auto
+
+# Unity YAML merge for scenes/prefabs/assets
+*.cs text diff=csharp
+*.unity merge=unityyamlmerge eol=lf
+*.prefab merge=unityyamlmerge eol=lf
+*.asset merge=unityyamlmerge eol=lf
+*.meta merge=unityyamlmerge eol=lf
+*.controller merge=unityyamlmerge eol=lf
