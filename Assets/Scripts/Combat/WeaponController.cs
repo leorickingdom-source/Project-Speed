@@ -2,9 +2,10 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 // Data-driven loadout. Keys 1-5 select a weapon; left mouse fires (held for automatic
-// weapons, click for semi). Hitscan weapons raycast + draw a pooled tracer; the rocket
-// spawns a swept Rocket that explodes (splash damages IDamageables and knocks the player
-// back — rocket-jump). Real-player PvP is hitscan; bots use dodgeable Projectiles.
+// weapons, click for semi). Hitscan weapons raycast + draw a pooled tracer and can score
+// headshots (top slice of a target = bonus damage); the rocket spawns a swept Rocket that
+// explodes (splash + rocket-jump). Each weapon has a magazine; R reloads. Real-player PvP
+// is hitscan; bots use dodgeable Projectiles.
 public enum FireKind { Hitscan, Projectile }
 
 [System.Serializable]
@@ -28,6 +29,11 @@ public class Weapon
     public float blastDamage = 90f;
     public float blastForce = 16f;     // knockback to others
     public float selfForce = 24f;      // your own rocket-jump kick
+
+    [Header("Ammo")]
+    public int magSize = 15;
+    public float reloadTime = 1.2f;
+    [System.NonSerialized] public int ammo; // rounds left in the mag (runtime, never serialized)
 }
 
 public class WeaponController : MonoBehaviour
@@ -41,14 +47,23 @@ public class WeaponController : MonoBehaviour
     [Header("Loadout (keys 1-5)")]
     public Weapon[] weapons;            // auto-filled with the default 5 if left empty
 
+    [Header("Headshots (hitscan)")]
+    public float headMultiplier = 2f;
+    [Tooltip("Top fraction of a target's height that counts as a headshot.")]
+    [Range(0f, 1f)] public float headFraction = 0.28f;
+
     [Header("Tracers")]
     public float tracerTime = 0.04f;
 
     public int Current { get; private set; }
     public Weapon CurrentWeapon => (weapons != null && Current >= 0 && Current < weapons.Length) ? weapons[Current] : null;
     public string CurrentName => CurrentWeapon != null ? CurrentWeapon.name : "-";
+    public int CurrentAmmo => CurrentWeapon != null ? CurrentWeapon.ammo : 0;
+    public int CurrentMag => CurrentWeapon != null ? CurrentWeapon.magSize : 0;
+    public bool Reloading => Time.time < reloadDoneAt;
 
     float nextFire;
+    float reloadDoneAt;
     LineRenderer[] pool;
     float[] poolHide;
     int poolNext;
@@ -59,21 +74,27 @@ public class WeaponController : MonoBehaviour
         if (aim == null) { var c = GetComponentInChildren<Camera>(); if (c) aim = c.transform; }
         hitMask &= ~(1 << gameObject.layer);
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
+        foreach (var w in weapons) w.ammo = w.magSize; // start loaded
         BuildPool(16);
     }
 
     static Weapon[] DefaultLoadout() => new[]
     {
         new Weapon { name = "Pistol", kind = FireKind.Hitscan, automatic = true,  cycle = 0.28f,
-                     damage = 22f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(0.90f, 0.90f, 0.70f) },
+                     damage = 22f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(0.90f, 0.90f, 0.70f),
+                     magSize = 15, reloadTime = 1.0f },
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
-                     damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f) },
+                     damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
+                     magSize = 30, reloadTime = 1.6f },
         new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true,  cycle = 0.9f,
-                     projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f },
+                     projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
+                     magSize = 4, reloadTime = 2.2f },
         new Weapon { name = "Sniper", kind = FireKind.Hitscan, automatic = true,  cycle = 1.2f,
-                     damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f) },
+                     damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f),
+                     magSize = 5, reloadTime = 1.8f },
         new Weapon { name = "SMG",    kind = FireKind.Hitscan, automatic = true,  cycle = 0.07f,
-                     damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f) },
+                     damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
+                     magSize = 30, reloadTime = 1.4f },
     };
 
     void BuildPool(int n)
@@ -104,28 +125,51 @@ public class WeaponController : MonoBehaviour
         var m = Mouse.current;
         if (kb != null && weapons != null)
         {
+            int prev = Current;
             if (kb.digit1Key.wasPressedThisFrame) Current = 0;
             if (kb.digit2Key.wasPressedThisFrame) Current = 1;
             if (kb.digit3Key.wasPressedThisFrame) Current = 2;
             if (kb.digit4Key.wasPressedThisFrame) Current = 3;
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
+            if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
+            if (kb.rKey.wasPressedThisFrame) StartReload();
         }
 
         Weapon w = CurrentWeapon;
-        if (w != null && m != null)
+
+        // Finish an in-progress reload.
+        if (w != null && reloadDoneAt > 0f && Time.time >= reloadDoneAt)
+        {
+            w.ammo = w.magSize;
+            reloadDoneAt = 0f;
+        }
+
+        if (w != null && m != null && !Reloading)
         {
             bool wantFire = w.automatic ? m.leftButton.isPressed : m.leftButton.wasPressedThisFrame;
             if (wantFire && Time.time >= nextFire)
             {
-                Fire(w);
-                nextFire = Time.time + w.cycle;
+                if (w.ammo > 0)
+                {
+                    Fire(w);
+                    w.ammo--;
+                    nextFire = Time.time + w.cycle;
+                }
+                else StartReload(); // clicked empty -> auto-reload
             }
         }
 
         if (pool != null)
             for (int i = 0; i < pool.Length; i++)
                 if (pool[i].enabled && Time.time > poolHide[i]) pool[i].enabled = false;
+    }
+
+    void StartReload()
+    {
+        var w = CurrentWeapon;
+        if (w != null && !Reloading && w.ammo < w.magSize)
+            reloadDoneAt = Time.time + w.reloadTime;
     }
 
     void Fire(Weapon w)
@@ -153,7 +197,13 @@ public class WeaponController : MonoBehaviour
             {
                 end = hit.point;
                 var hp = hit.collider.GetComponentInParent<IDamageable>();
-                if (hp != null) hp.Damage(w.damage);
+                if (hp != null)
+                {
+                    // Headshot: hit lands in the top slice of the target's collider.
+                    Bounds b = hit.collider.bounds;
+                    bool head = hit.point.y >= b.max.y - b.size.y * headFraction;
+                    hp.Damage(head ? w.damage * headMultiplier : w.damage);
+                }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
         }

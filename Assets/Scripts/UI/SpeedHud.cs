@@ -47,9 +47,12 @@ public class SpeedHud : MonoBehaviour
             GUI.Label(new Rect(14, 132, 600, 28), hpText, style);
         }
 
-        // Current weapon.
+        // Current weapon + ammo.
         if (weapon != null)
-            GUI.Label(new Rect(14, 162, 600, 28), $"WEAPON  {weapon.CurrentName}", style);
+        {
+            string ammo = weapon.Reloading ? "reloading..." : $"{weapon.CurrentAmmo}/{weapon.CurrentMag}";
+            GUI.Label(new Rect(14, 162, 600, 28), $"WEAPON  {weapon.CurrentName}   {ammo}   [R] reload", style);
+        }
 
         // Active power-ups + countdowns.
         if (receiver != null)
