@@ -41,11 +41,7 @@ public class InputReader : MonoBehaviour
         CrouchHeld = kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed || kb.cKey.isPressed;
         LookDelta = mouse != null ? mouse.delta.ReadValue() : Vector2.zero;
         Scroll = mouse != null ? mouse.scroll.ReadValue() : Vector2.zero;
-
-        // Esc toggles cursor lock so you can click out while testing.
-        if (kb.escapeKey.wasPressedThisFrame)
-            Cursor.lockState = Cursor.lockState == CursorLockMode.Locked
-                ? CursorLockMode.None : CursorLockMode.Locked;
+        // Esc is owned by GameMenu (pause / cursor). Nothing to do here.
     }
 
     // Consumed by FixedUpdate so a single tap isn't dropped between frames.

@@ -33,7 +33,7 @@ public class MouseLook : MonoBehaviour
 
     void Update()
     {
-        if (input == null) return;
+        if (input == null || Time.timeScale == 0f) return; // frozen while paused
         Vector2 d = input.LookDelta * sensitivity;
         if (body != null) body.Rotate(0f, d.x, 0f, Space.World);
         if (cam != null)
