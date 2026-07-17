@@ -12,7 +12,7 @@ public class GameMenu : MonoBehaviour
         "Space  —  jump (hold to bunny-hop)",
         "Ctrl / C  —  crouch · slide · crouch-jump",
         "Mouse  —  look     LMB  —  fire     R  —  reload",
-        "1-5  —  Pistol  Rifle  Rocket  Sniper  SMG",
+        "1-6  —  Pistol Rifle Rocket Sniper SMG Shotgun",
         "RMB  —  grapple (reels you in)",
         "Rocket at your feet  —  rocket-jump",
         "Aim for the head  —  2x damage",

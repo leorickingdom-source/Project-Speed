@@ -95,6 +95,9 @@ public class WeaponController : MonoBehaviour
         new Weapon { name = "SMG",    kind = FireKind.Hitscan, automatic = true,  cycle = 0.07f,
                      damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
                      magSize = 30, reloadTime = 1.4f },
+        new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
+                     damage = 10f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
+                     magSize = 6, reloadTime = 1.8f },
     };
 
     void BuildPool(int n)
@@ -131,6 +134,7 @@ public class WeaponController : MonoBehaviour
             if (kb.digit3Key.wasPressedThisFrame) Current = 2;
             if (kb.digit4Key.wasPressedThisFrame) Current = 3;
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
+            if (kb.digit6Key.wasPressedThisFrame) Current = 5;
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
             if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
             if (kb.rKey.wasPressedThisFrame) StartReload();

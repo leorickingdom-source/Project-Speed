@@ -14,6 +14,8 @@ public class DamageDummy : MonoBehaviour, IDamageable
     public float numberLifetime = 1.1f;
     public float riseSpeed = 1.6f;
     public Color numberColor = new Color(1f, 0.92f, 0.35f);
+    [Tooltip("Clear the running total after this many seconds without a hit.")]
+    public float resetAfter = 2f;
 
     public float Total { get; private set; }
     public float Last { get; private set; }
@@ -52,6 +54,9 @@ public class DamageDummy : MonoBehaviour, IDamageable
         // Drop expired numbers.
         for (int i = pops.Count - 1; i >= 0; i--)
             if (Time.time - pops[i].time > numberLifetime) pops.RemoveAt(i);
+
+        // Clear the running total after a lull, so each burst reads fresh.
+        if (Total > 0f && Time.time - lastHitTime > resetAfter) { Total = 0f; Last = 0f; }
     }
 
     void OnGUI()
