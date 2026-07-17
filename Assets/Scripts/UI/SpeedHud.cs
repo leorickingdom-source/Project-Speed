@@ -7,6 +7,7 @@ public class SpeedHud : MonoBehaviour
     public PlayerMotor motor;
     public PowerupReceiver receiver;
     public PlayerHealth health;
+    public WeaponController weapon;
     GUIStyle style;
     readonly List<PowerupSlot> active = new();
 
@@ -18,6 +19,8 @@ public class SpeedHud : MonoBehaviour
         if (receiver == null) receiver = FindAnyObjectByType<PowerupReceiver>();
         if (health == null && motor != null) health = motor.GetComponent<PlayerHealth>();
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
+        if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
+        if (weapon == null) weapon = FindAnyObjectByType<WeaponController>();
     }
 
     void OnGUI()
@@ -44,11 +47,15 @@ public class SpeedHud : MonoBehaviour
             GUI.Label(new Rect(14, 132, 600, 28), hpText, style);
         }
 
+        // Current weapon.
+        if (weapon != null)
+            GUI.Label(new Rect(14, 162, 600, 28), $"WEAPON  {weapon.CurrentName}", style);
+
         // Active power-ups + countdowns.
         if (receiver != null)
         {
             receiver.GetActive(active);
-            float y = 162f;
+            float y = 192f;
             foreach (var s in active)
             {
                 GUI.Label(new Rect(14, y, 600, 28), $"{s.Type}  {s.Remaining:0.0}s", style);
