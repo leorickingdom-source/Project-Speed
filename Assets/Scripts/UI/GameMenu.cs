@@ -11,10 +11,11 @@ public class GameMenu : MonoBehaviour
         "WASD  —  move",
         "Space  —  jump (hold to bunny-hop)",
         "Ctrl / C  —  crouch · slide · crouch-jump",
-        "Mouse  —  look        LMB  —  fire (hold)",
+        "Mouse  —  look     LMB  —  fire     R  —  reload",
         "1-5  —  Pistol  Rifle  Rocket  Sniper  SMG",
         "RMB  —  grapple (reels you in)",
         "Rocket at your feet  —  rocket-jump",
+        "Aim for the head  —  2x damage",
     };
 
     bool showControls = true; // visible on launch
