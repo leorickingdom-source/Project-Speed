@@ -103,12 +103,21 @@ public class PlayerMotor : MonoBehaviour
 
     void FixedUpdate()
     {
-        float dt = Time.fixedDeltaTime;
+        // Local play: build the tick command from live input and step the sim.
+        Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
+    }
+
+    // Deterministic movement step — the ONLY input is `cmd`, so this can be replayed
+    // for client-side prediction / reconciliation later without changing the feel.
+    // (Facing still comes from `yaw`/transform; look angles join the command when
+    // networking lands.)
+    public void Step(InputCmd cmd, float dt)
+    {
         GroundCheck();
-        UpdateStance(dt);
+        UpdateStance(cmd, dt);
         UpdateFlow(dt);
 
-        Vector3 wish = WishDir();
+        Vector3 wish = WishDir(cmd);
 
         if (grounded)
         {
@@ -118,14 +127,14 @@ public class PlayerMotor : MonoBehaviour
                 ApplySlideFriction(dt);
                 SlideSteer(wish, dt);
                 AddSlopeAccel(dt);
-                if (!TryJump() && !Grappling) velocity.y = -2f;
+                if (!TryJump(cmd) && !Grappling) velocity.y = -2f;
             }
             else
             {
                 float cap = crouching ? crouchSpeed : groundSpeed * (useFlow ? flow : 1f);
                 ApplyFriction(dt);
                 Accelerate(wish, cap, groundAccel, dt);
-                if (!TryJump() && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
+                if (!TryJump(cmd) && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
             }
         }
         else
@@ -137,7 +146,7 @@ public class PlayerMotor : MonoBehaviour
         }
 
         // Grapple shapes velocity after accel/gravity, before we move (motor = sole mover).
-        if (grapple != null) grapple.ApplyTo(ref velocity, transform.position, dt);
+        if (grapple != null) grapple.ApplyTo(ref velocity, transform.position, dt, cmd.grapple);
 
         Vector3 pos = CollideAndSlide(transform.position, velocity * dt);
         Depenetrate(ref pos);
@@ -156,9 +165,9 @@ public class PlayerMotor : MonoBehaviour
     // Crouch / slide state machine. Hold (or tap) crouch while moving fast on the
     // ground to slide (keeps momentum, low friction, ducks under low ceilings);
     // crouch-walk when slow. You can only stand back up when there is headroom.
-    void UpdateStance(float dt)
+    void UpdateStance(InputCmd cmd, float dt)
     {
-        bool crouchHeld = input != null && input.CrouchHeld;
+        bool crouchHeld = cmd.crouch;
 
         // Hold OR tap to slide: you're sliding whenever crouching, grounded and
         // still fast. Speed hysteresis (enter at slideEnterSpeed, exit at the lower
@@ -264,9 +273,9 @@ public class PlayerMotor : MonoBehaviour
         grounded = false;
     }
 
-    Vector3 WishDir()
+    Vector3 WishDir(InputCmd cmd)
     {
-        Vector2 mv = input != null ? input.Move : Vector2.zero;
+        Vector2 mv = cmd.move;
         Vector3 dir = yaw.right * mv.x + yaw.forward * mv.y;
         dir.y = 0f;
         return dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.zero;
@@ -296,11 +305,9 @@ public class PlayerMotor : MonoBehaviour
         velocity.z *= scale;
     }
 
-    bool TryJump()
+    bool TryJump(InputCmd cmd)
     {
-        bool want = autoBhop
-            ? (input != null && input.JumpHeld)
-            : (input != null && input.ConsumeJump());
+        bool want = autoBhop ? cmd.jumpHeld : cmd.jumpPressed;
         if (!want) return false;
         velocity.y = jumpForce;
         grounded = false;

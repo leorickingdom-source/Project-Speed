@@ -12,7 +12,6 @@ using UnityEngine;
 public class GrappleHook : MonoBehaviour
 {
     [Header("Refs")]
-    public InputReader input;
     public Transform aim;             // camera transform (ray origin + direction)
 
     [Header("Grapple")]
@@ -43,7 +42,6 @@ public class GrappleHook : MonoBehaviour
     {
         line = GetComponent<LineRenderer>();
         receiver = GetComponent<PowerupReceiver>();
-        if (input == null) input = GetComponent<InputReader>();
         if (aim == null)
         {
             var c = GetComponentInChildren<Camera>();
@@ -74,9 +72,9 @@ public class GrappleHook : MonoBehaviour
     Vector3 RopeStart => aim != null ? aim.position - aim.up * 0.25f : PullPoint;
 
     // Called by PlayerMotor each fixed tick (after accel/gravity, before the move).
-    public void ApplyTo(ref Vector3 velocity, Vector3 pos, float dt)
+    public void ApplyTo(ref Vector3 velocity, Vector3 pos, float dt, bool grappleHeld)
     {
-        if (input == null || aim == null) return;
+        if (aim == null) return;
 
         // Power-up gated (unless requirePowerup is off): inert when the Grapple power-up
         // isn't active. Drop any live rope and swallow the current press so it can't
@@ -84,11 +82,11 @@ public class GrappleHook : MonoBehaviour
         if (requirePowerup && (receiver == null || !receiver.IsActive(PowerupType.Grapple)))
         {
             if (Attached) Attached = false;
-            wasHeld = input.GrappleHeld;
+            wasHeld = grappleHeld;
             return;
         }
 
-        bool held = input.GrappleHeld;
+        bool held = grappleHeld;
         if (held && !wasHeld) TryAttach();
         else if (!held && wasHeld) Attached = false; // release -> momentum preserved
         wasHeld = held;

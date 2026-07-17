@@ -54,4 +54,15 @@ public class InputReader : MonoBehaviour
         if (jumpBuffered) { jumpBuffered = false; return true; }
         return false;
     }
+
+    // Build one tick of movement intent for the motor (consumes the jump buffer).
+    // This is the single seam between raw devices and the deterministic sim.
+    public InputCmd Sample() => new InputCmd
+    {
+        move = Move,
+        jumpHeld = JumpHeld,
+        jumpPressed = ConsumeJump(),
+        crouch = CrouchHeld,
+        grapple = GrappleHeld,
+    };
 }
