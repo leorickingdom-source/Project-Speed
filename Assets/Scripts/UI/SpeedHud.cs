@@ -6,6 +6,7 @@ public class SpeedHud : MonoBehaviour
 {
     public PlayerMotor motor;
     public PowerupReceiver receiver;
+    public PlayerHealth health;
     GUIStyle style;
     readonly List<PowerupSlot> active = new();
 
@@ -15,6 +16,8 @@ public class SpeedHud : MonoBehaviour
         if (motor == null) motor = FindAnyObjectByType<PlayerMotor>();
         if (receiver == null && motor != null) receiver = motor.GetComponent<PowerupReceiver>();
         if (receiver == null) receiver = FindAnyObjectByType<PowerupReceiver>();
+        if (health == null && motor != null) health = motor.GetComponent<PlayerHealth>();
+        if (health == null) health = FindAnyObjectByType<PlayerHealth>();
     }
 
     void OnGUI()
@@ -32,11 +35,20 @@ public class SpeedHud : MonoBehaviour
         string stance = motor.sliding ? "SLIDE" : motor.crouching ? "crouch" : "stand";
         GUI.Label(new Rect(14, 100, 600, 28), $"flow  x{motor.flow:0.00}    [{stance}]", style);
 
+        // Health.
+        if (health != null)
+        {
+            string hpText = health.Alive
+                ? $"HP  {health.Hp:0}{(health.Invulnerable ? "  (invuln)" : "")}"
+                : "DEAD — respawning";
+            GUI.Label(new Rect(14, 132, 600, 28), hpText, style);
+        }
+
         // Active power-ups + countdowns.
         if (receiver != null)
         {
             receiver.GetActive(active);
-            float y = 132f;
+            float y = 162f;
             foreach (var s in active)
             {
                 GUI.Label(new Rect(14, y, 600, 28), $"{s.Type}  {s.Remaining:0.0}s", style);

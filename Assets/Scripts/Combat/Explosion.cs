@@ -24,7 +24,7 @@ public static class Explosion
                 motor.AddImpulse(dir * f * (0.35f + 0.65f * falloff));
             }
 
-            var hp = c.GetComponentInParent<Health>();
+            var hp = c.GetComponentInParent<IDamageable>();
             if (hp != null) hp.Damage(damage * falloff);
         }
     }

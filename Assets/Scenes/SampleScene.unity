@@ -1518,6 +1518,8 @@ MonoBehaviour:
   moveSpeed: 4.5
   stopDistance: 2
   turnSpeed: 8
+  touchRange: 2.2
+  damagePerSec: 12
 --- !u!114 &877341731
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2717,6 +2719,7 @@ GameObject:
   - component: {fileID: 1486045622}
   - component: {fileID: 1486045624}
   - component: {fileID: 1486045625}
+  - component: {fileID: 1486045626}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -2738,6 +2741,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpeedHud
   motor: {fileID: 0}
   receiver: {fileID: 0}
+  health: {fileID: 0}
 --- !u!114 &1486045615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2907,7 +2911,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dec0477f36ce7e442ac3e6e5abd3645e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GrappleHook
-  input: {fileID: 0}
   aim: {fileID: 0}
   requirePowerup: 0
   grappleMask:
@@ -3069,6 +3072,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed64b391defd7eb4888484a6250afbce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PowerupReceiver
+--- !u!114 &1486045626
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a8b210c39cf8494388b50a3d75b80d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  maxHp: 100
+  respawnDelay: 1.5
+  spawnInvuln: 2
+  regenPerSec: 0
+  regenDelay: 3
+  spawnPoint: {fileID: 0}
 --- !u!134 &1761937542
 PhysicsMaterial:
   m_ObjectHideFlags: 0
@@ -3118,6 +3139,8 @@ MonoBehaviour:
   moveSpeed: 4.5
   stopDistance: 2
   turnSpeed: 8
+  touchRange: 2.2
+  damagePerSec: 12
 --- !u!114 &1765991416
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3745,6 +3768,8 @@ MonoBehaviour:
   moveSpeed: 4.5
   stopDistance: 2
   turnSpeed: 8
+  touchRange: 2.2
+  damagePerSec: 12
 --- !u!114 &2021473986
 MonoBehaviour:
   m_ObjectHideFlags: 0

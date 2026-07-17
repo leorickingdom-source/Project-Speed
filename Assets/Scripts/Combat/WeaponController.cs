@@ -101,7 +101,7 @@ public class WeaponController : MonoBehaviour
                     QueryTriggerInteraction.Ignore))
             {
                 end = hit.point;
-                var hp = hit.collider.GetComponentInParent<Health>();
+                var hp = hit.collider.GetComponentInParent<IDamageable>();
                 if (hp != null) hp.Damage(pelletDamage);
             }
             Tracer(origin - aim.up * 0.15f, end, shotgunColor);
@@ -117,7 +117,7 @@ public class WeaponController : MonoBehaviour
                 QueryTriggerInteraction.Ignore))
         {
             end = hit.point;
-            var hp = hit.collider.GetComponentInParent<Health>();
+            var hp = hit.collider.GetComponentInParent<IDamageable>();
             if (hp != null) hp.Damage(railDamage);
         }
         Tracer(origin - aim.up * 0.2f, end, railColor);

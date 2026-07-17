@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections;
 
 // Simple destructible target that respawns so you can keep practicing.
-public class Health : MonoBehaviour
+public class Health : MonoBehaviour, IDamageable
 {
     public float maxHp = 100f;
     public float respawnDelay = 3f;
