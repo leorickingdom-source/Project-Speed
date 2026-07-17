@@ -75,6 +75,11 @@ public class PlayerMotor : MonoBehaviour
 
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
 
+    // Freeze flag set by PlayerHealth on death/respawn. Skips the sim WITHOUT toggling
+    // component.enabled — an auto-property is not serialized, so a death state can never
+    // leak into a saved scene (which once shipped a build where the player couldn't move).
+    public bool Frozen { get; set; }
+
     // True while the grapple is reeling — used to drop ground-glue so it can lift you.
     bool Grappling => grapple != null && grapple.Attached;
 
@@ -103,6 +108,7 @@ public class PlayerMotor : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (Frozen) return; // dead / respawning — skip the sim (see PlayerHealth)
         // Local play: build the tick command from live input and step the sim.
         Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
     }

@@ -76,14 +76,14 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         Alive = false;
         reviveAt = Time.time + respawnDelay;
         motor.velocity = Vector3.zero;
-        motor.enabled = false; // freeze the sim until respawn
+        motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
     }
 
     void Respawn()
     {
         transform.SetPositionAndRotation(spawnPos, spawnRot);
         motor.velocity = Vector3.zero;
-        motor.enabled = true;
+        motor.Frozen = false;
         Hp = maxHp;
         Alive = true;
         invulnUntil = Time.time + spawnInvuln;
