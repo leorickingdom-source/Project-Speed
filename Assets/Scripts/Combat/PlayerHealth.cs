@@ -19,6 +19,10 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     [Tooltip("Where to respawn. Defaults to the player's start pose.")]
     public Transform spawnPoint;
 
+    [Header("Bounds")]
+    [Tooltip("Fall below this world Y and you die + respawn (out-of-bounds kill plane).")]
+    public float killY = -25f;
+
     public float Hp { get; private set; }
     public bool Alive { get; private set; } = true;
     public bool Invulnerable => Time.time < invulnUntil;
@@ -59,6 +63,10 @@ public class PlayerHealth : MonoBehaviour, IDamageable
             if (Time.time >= reviveAt) Respawn();
             return;
         }
+
+        // Fell out of the world -> instant death (invuln doesn't save you from the void).
+        if (transform.position.y < killY) { Die(); return; }
+
         if (regenPerSec > 0f && Hp < maxHp && Time.time - lastDamageTime >= regenDelay)
             Hp = Mathf.Min(maxHp, Hp + regenPerSec * Time.deltaTime);
     }
