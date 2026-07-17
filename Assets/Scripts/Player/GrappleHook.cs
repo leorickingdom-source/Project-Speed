@@ -1,12 +1,13 @@
 using UnityEngine;
 
-// Grapple swing. Right mouse fires from the crosshair; on a hit it anchors and
-// applies a pendulum rope constraint to the motor's velocity. Releasing keeps all
-// momentum (slingshot). Scroll reels in / out.
+// Grapple reel — POWER-UP GATED: right mouse only works while the Grapple power-up
+// is active (see PowerupReceiver). On a hit it anchors and REELS the player straight
+// toward the anchor (Titanfall-style yank): it drives your velocity onto the rope
+// line so the reel is firm and immediate, not a saggy swing. Auto-releases just before
+// the anchor so you launch past instead of splatting; releasing early keeps momentum.
 //
 // Integrates with PlayerMotor via ApplyTo(): the motor calls this each fixed tick
-// AFTER accel/gravity and BEFORE the move, so the motor stays the single mover and
-// grapple never fights it for the transform.
+// AFTER accel/gravity and BEFORE the move, so the motor stays the single mover.
 [RequireComponent(typeof(LineRenderer))]
 public class GrappleHook : MonoBehaviour
 {
@@ -15,14 +16,16 @@ public class GrappleHook : MonoBehaviour
     public Transform aim;             // camera transform (ray origin + direction)
 
     [Header("Grapple")]
+    [Tooltip("If off, grapple always works without the power-up (dev/testing).")]
+    public bool requirePowerup = true;
     public LayerMask grappleMask = ~0;
     public float maxRange = 60f;
-    public float minRope = 3f;
-    public float reelSpeed = 18f;     // rope length change per second while scrolling
-    [Tooltip("How hard the taut rope corrects back to its length (0..1 of the overshoot per tick).")]
-    [Range(0f, 1f)] public float pullCorrection = 0.5f;
-    [Tooltip("Constant inward tug for a powered swing. 0 = pure pendulum.")]
-    public float swingAssist = 0f;
+    [Tooltip("How hard you're yanked toward the anchor (m/s^2). Higher = snappier pull.")]
+    public float pullAccel = 55f;
+    [Tooltip("Max reel-in speed toward the anchor (m/s).")]
+    public float maxPullSpeed = 32f;
+    [Tooltip("Auto-release when this close to the anchor, so you launch past instead of splatting.")]
+    public float arriveDistance = 2.5f;
 
     [Header("Visual")]
     public float ropeWidth = 0.06f;
@@ -30,15 +33,16 @@ public class GrappleHook : MonoBehaviour
 
     public bool Attached { get; private set; }
     public Vector3 Anchor { get; private set; }
-    public float RopeLength { get; private set; }
 
     LineRenderer line;
+    PowerupReceiver receiver;          // grapple is inert unless this says it's active
     bool wasHeld;
-    const float center = 1f;          // swing point = feet + up*center (capsule middle)
+    const float center = 1f;          // pull reference = feet + up*center (capsule middle)
 
     void Awake()
     {
         line = GetComponent<LineRenderer>();
+        receiver = GetComponent<PowerupReceiver>();
         if (input == null) input = GetComponent<InputReader>();
         if (aim == null)
         {
@@ -66,13 +70,23 @@ public class GrappleHook : MonoBehaviour
         line.enabled = false;
     }
 
-    Vector3 SwingPoint => transform.position + Vector3.up * center;
-    Vector3 RopeStart => aim != null ? aim.position - aim.up * 0.25f : SwingPoint;
+    Vector3 PullPoint => transform.position + Vector3.up * center;
+    Vector3 RopeStart => aim != null ? aim.position - aim.up * 0.25f : PullPoint;
 
     // Called by PlayerMotor each fixed tick (after accel/gravity, before the move).
     public void ApplyTo(ref Vector3 velocity, Vector3 pos, float dt)
     {
         if (input == null || aim == null) return;
+
+        // Power-up gated (unless requirePowerup is off): inert when the Grapple power-up
+        // isn't active. Drop any live rope and swallow the current press so it can't
+        // auto-fire the instant a fresh pickup activates while the button is already held.
+        if (requirePowerup && (receiver == null || !receiver.IsActive(PowerupType.Grapple)))
+        {
+            if (Attached) Attached = false;
+            wasHeld = input.GrappleHeld;
+            return;
+        }
 
         bool held = input.GrappleHeld;
         if (held && !wasHeld) TryAttach();
@@ -81,28 +95,15 @@ public class GrappleHook : MonoBehaviour
 
         if (!Attached) return;
 
-        // Reel in (scroll up) / out (scroll down) — direction only, notch size ignored.
-        float scroll = input.Scroll.y;
-        if (Mathf.Abs(scroll) > 0.01f)
-            RopeLength = Mathf.Clamp(RopeLength - Mathf.Sign(scroll) * reelSpeed * dt,
-                minRope, maxRange);
-
-        Vector3 toAnchor = Anchor - SwingPoint;
+        Vector3 toAnchor = Anchor - PullPoint;
         float dist = toAnchor.magnitude;
-        if (dist < 0.001f) return;
+        if (dist <= arriveDistance) { Attached = false; return; } // arrived -> launch past
         Vector3 dir = toAnchor / dist;
 
-        if (dist > RopeLength)
-        {
-            // Remove velocity pointing away from the anchor; keep tangential -> swing.
-            float radialOut = Vector3.Dot(velocity, -dir);
-            if (radialOut > 0f) velocity += dir * radialOut;
-            // Pull back toward the rope length so it behaves taut.
-            float overshoot = dist - RopeLength;
-            velocity += dir * (overshoot / dt) * pullCorrection;
-        }
-
-        if (swingAssist > 0f) velocity += dir * (swingAssist * dt);
+        // Reel straight in: drive velocity toward (dir * maxPullSpeed), overriding
+        // gravity and drift so it's a firm, immediate yank rather than a saggy arc.
+        // pullAccel is how fast velocity snaps onto that reel vector (m/s per second).
+        velocity = Vector3.MoveTowards(velocity, dir * maxPullSpeed, pullAccel * dt);
     }
 
     void TryAttach()
@@ -112,7 +113,6 @@ public class GrappleHook : MonoBehaviour
         {
             Attached = true;
             Anchor = hit.point;
-            RopeLength = Mathf.Max(minRope, Vector3.Distance(SwingPoint, Anchor));
         }
     }
 

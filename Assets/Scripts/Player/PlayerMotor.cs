@@ -41,6 +41,21 @@ public class PlayerMotor : MonoBehaviour
     public float jumpForce = 8f;
     public bool autoBhop = true;
 
+    [Header("Crouch / slide")]
+    public float standHeight = 2f;
+    public float crouchHeight = 1f;
+    public float crouchSpeed = 4f;         // crouch-walk speed (ignores flow)
+    public float stanceLerp = 14f;         // how fast the capsule/eye resize
+    public Transform head;                 // camera to lower (auto = child camera)
+    public float standEyeHeight = 1.6f;    // camera local Y standing (captured in Awake)
+    [Tooltip("Min horizontal speed to start a slide when you tap crouch.")]
+    public float slideEnterSpeed = 8f;
+    public float slideBoost = 1.15f;       // momentum kick on slide entry
+    public float slideFriction = 2f;       // low friction while sliding (vs friction)
+    public float slideTurnRate = 4f;       // slide steer speed (rad/s), rotates velocity, never adds speed
+    public float slideSlopeAccel = 18f;    // downhill acceleration while sliding
+    public float slideMinSpeed = 5f;       // slide ends below this speed (hysteresis vs enter)
+
     [Header("Flow (accessible momentum)")]
     [Tooltip("Keep moving and top speed climbs toward groundSpeed*flowMax; stop and it bleeds. " +
              "This is the 'more movement = more speed' feel without needing Quake strafe skill.")]
@@ -55,8 +70,13 @@ public class PlayerMotor : MonoBehaviour
     public Vector3 velocity;
     public bool grounded;
     public Vector3 groundNormal = Vector3.up;
+    public bool crouching;
+    public bool sliding;
 
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
+
+    // True while the grapple is reeling — used to drop ground-glue so it can lift you.
+    bool Grappling => grapple != null && grapple.Attached;
 
     CapsuleCollider col;
     GrappleHook grapple;
@@ -65,11 +85,17 @@ public class PlayerMotor : MonoBehaviour
     {
         col = GetComponent<CapsuleCollider>();
         grapple = GetComponent<GrappleHook>();
+        height = standHeight;
         col.radius = radius;
-        col.height = height;
-        col.center = Vector3.up * (height * 0.5f);
+        UpdateCapsule();
         if (input == null) input = GetComponent<InputReader>();
         if (yaw == null) yaw = transform;
+        if (head == null)
+        {
+            var camT = GetComponentInChildren<Camera>();
+            if (camT != null) head = camT.transform;
+        }
+        if (head != null) standEyeHeight = head.localPosition.y;
         // Exclude our own layer so ground/wall casts never hit the player capsule.
         groundMask &= ~(1 << gameObject.layer);
         flow = 1f;
@@ -79,19 +105,32 @@ public class PlayerMotor : MonoBehaviour
     {
         float dt = Time.fixedDeltaTime;
         GroundCheck();
+        UpdateStance(dt);
         UpdateFlow(dt);
 
         Vector3 wish = WishDir();
-        float maxSpeed = groundSpeed * (useFlow ? flow : 1f);
 
         if (grounded)
         {
-            ApplyFriction(dt);
-            Accelerate(wish, maxSpeed, groundAccel, dt);
-            if (!TryJump()) velocity.y = -2f; // press down to stay glued
+            if (sliding)
+            {
+                // Keep momentum: low friction, speed-preserving steer, downhill accel.
+                ApplySlideFriction(dt);
+                SlideSteer(wish, dt);
+                AddSlopeAccel(dt);
+                if (!TryJump() && !Grappling) velocity.y = -2f;
+            }
+            else
+            {
+                float cap = crouching ? crouchSpeed : groundSpeed * (useFlow ? flow : 1f);
+                ApplyFriction(dt);
+                Accelerate(wish, cap, groundAccel, dt);
+                if (!TryJump() && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
+            }
         }
         else
         {
+            float maxSpeed = groundSpeed * (useFlow ? flow : 1f);
             float ws = useAirCap ? Mathf.Min(maxSpeed, airCapSpeed) : maxSpeed;
             Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * dt;
@@ -112,6 +151,101 @@ public class PlayerMotor : MonoBehaviour
         if (Speed > flowMoveThreshold) flow += flowGainPerSec * dt;
         else if (grounded) flow -= flowDecayPerSec * dt;
         flow = Mathf.Clamp(flow, 1f, flowMax);
+    }
+
+    // Crouch / slide state machine. Hold (or tap) crouch while moving fast on the
+    // ground to slide (keeps momentum, low friction, ducks under low ceilings);
+    // crouch-walk when slow. You can only stand back up when there is headroom.
+    void UpdateStance(float dt)
+    {
+        bool crouchHeld = input != null && input.CrouchHeld;
+
+        // Hold OR tap to slide: you're sliding whenever crouching, grounded and
+        // still fast. Speed hysteresis (enter at slideEnterSpeed, exit at the lower
+        // slideMinSpeed) stops flicker and re-boosting every tick.
+        if (sliding)
+        {
+            if (!crouchHeld || !grounded || Speed < slideMinSpeed)
+                sliding = false;
+        }
+        else if (crouchHeld && grounded && Speed >= slideEnterSpeed)
+        {
+            sliding = true;
+            velocity.x *= slideBoost; // one-time momentum kick on entry
+            velocity.z *= slideBoost;
+        }
+
+        bool wantLow = sliding || crouchHeld;
+        float target = wantLow ? crouchHeight : standHeight;
+        if (!wantLow && !HasHeadroom(standHeight)) target = crouchHeight; // ceiling above
+        crouching = target < standHeight - 0.01f;
+
+        // Resize the capsule. On the ground the feet stay put and the crown ducks; in
+        // the AIR, crouching tucks the feet UP (head held fixed) so you can crouch-jump
+        // onto ledges a normal jump can't clear — your feet land where your center was.
+        float prevHeight = height;
+        height = Mathf.MoveTowards(height, target, stanceLerp * dt);
+        if (!grounded) transform.position += Vector3.up * (prevHeight - height);
+        UpdateCapsule();
+        if (head != null)
+        {
+            Vector3 lp = head.localPosition;
+            lp.y = standEyeHeight - (standHeight - height);
+            head.localPosition = lp;
+        }
+    }
+
+    void UpdateCapsule()
+    {
+        col.height = height;
+        col.center = Vector3.up * (height * 0.5f);
+    }
+
+    // Low friction so a slide glides; no stopSpeed floor.
+    void ApplySlideFriction(float dt)
+    {
+        float speed = new Vector2(velocity.x, velocity.z).magnitude;
+        if (speed < 0.01f) return;
+        float drop = speed * slideFriction * dt;
+        float scale = Mathf.Max(speed - drop, 0f) / speed;
+        velocity.x *= scale;
+        velocity.z *= scale;
+    }
+
+    // Steer a slide by ROTATING horizontal velocity toward wishDir, magnitude
+    // unchanged — turning redirects momentum instead of pumping speed. Only friction
+    // (and downhill slope) change how fast you're going.
+    void SlideSteer(Vector3 wish, float dt)
+    {
+        if (wish.sqrMagnitude < 1e-4f) return;
+        Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
+        float sp = flat.magnitude;
+        if (sp < 0.01f) return;
+        Vector3 cur = flat / sp;
+        Vector3 w = new Vector3(wish.x, 0f, wish.z).normalized;
+        Vector3 nd = Vector3.RotateTowards(cur, w, slideTurnRate * dt, 0f);
+        velocity.x = nd.x * sp;
+        velocity.z = nd.z * sp;
+    }
+
+    // Downhill pull while sliding: zero on flat ground, grows with slope steepness.
+    void AddSlopeAccel(float dt)
+    {
+        Vector3 slope = Vector3.ProjectOnPlane(Vector3.down, groundNormal); // |slope| = sin(angle)
+        velocity.x += slope.x * slideSlopeAccel * dt;
+        velocity.z += slope.z * slideSlopeAccel * dt;
+    }
+
+    // Is there room to grow back to targetHeight? Casts up from the crown only, so
+    // standing next to a wall never counts as "blocked" — only a real ceiling does.
+    bool HasHeadroom(float targetHeight)
+    {
+        float delta = targetHeight - height;
+        if (delta <= 0.001f) return true;
+        Vector3 crown = transform.position + Vector3.up * (height - radius);
+        return !(Physics.SphereCast(crown, radius - 0.02f, Vector3.up, out RaycastHit hit,
+                     delta + 0.02f, groundMask, QueryTriggerInteraction.Ignore)
+                 && hit.collider != col);
     }
 
     // External knockback (explosions, future rocket jump). Adds straight to velocity.

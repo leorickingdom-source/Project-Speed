@@ -11,6 +11,7 @@ public class InputReader : MonoBehaviour
     public Vector2 Scroll { get; private set; }    // wheel delta (reel rope)
     public bool FireHeld { get; private set; }     // reserved (weapons, P4)
     public bool GrappleHeld { get; private set; }  // right mouse = grapple
+    public bool CrouchHeld { get; private set; }   // ctrl / C = crouch + slide
 
     bool jumpBuffered;
 
@@ -23,6 +24,7 @@ public class InputReader : MonoBehaviour
         {
             Move = Vector2.zero;
             JumpHeld = false;
+            CrouchHeld = false;
             LookDelta = Vector2.zero;
             return;
         }
@@ -36,6 +38,7 @@ public class InputReader : MonoBehaviour
 
         FireHeld = mouse != null && mouse.leftButton.isPressed;
         GrappleHeld = mouse != null && mouse.rightButton.isPressed;
+        CrouchHeld = kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed || kb.cKey.isPressed;
         LookDelta = mouse != null ? mouse.delta.ReadValue() : Vector2.zero;
         Scroll = mouse != null ? mouse.scroll.ReadValue() : Vector2.zero;
 
