@@ -1,10 +1,12 @@
-// Named passive kinds. Unlike PowerupType these never expire: a passive is equipped
-// once and stays on for the life of the player — no pickup, no timer, no contest.
-// Only Vitality is wired this pass; Grapple is listed because GrappleHook already has
-// the gate (requirePowerup) and is the natural next one to convert.
+// Named passive kinds. A player brings exactly ONE (see PassiveLoadout).
+//
+// Grapple is deliberately NOT in this list. It is a BASELINE mechanic every player has,
+// not a choice: the core traversal verb should not cost a loadout slot, or half the
+// players are not playing the movement game at all. Same reasoning as Warsow's dash and
+// Titanfall's wall-run — the signature verb is free, and choices sit on top of it.
 public enum PassiveType
 {
+    None,       // no passive equipped
     Vitality,   // +max HP (amount owned by PlayerHealth)
     Momentum,   // damage scales with your speed (see MomentumDamage)
-    Grapple,    // grapple with no pickup required
 }

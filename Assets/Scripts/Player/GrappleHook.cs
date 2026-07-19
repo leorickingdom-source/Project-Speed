@@ -1,7 +1,11 @@
 using UnityEngine;
 
-// Grapple reel — POWER-UP GATED: right mouse only works while the Grapple power-up
-// is active (see PowerupReceiver). On a hit it anchors and REELS the player straight
+// Grapple reel — BASELINE for every player: right mouse always works, no pickup and no
+// loadout slot. It is the traversal verb the game is built around, so gating it would
+// mean some players simply are not playing the movement game (cf. Warsow's dash,
+// Titanfall's wall-run). The power-up gate below is kept, defaulted off, so the timed
+// pickup path can be switched back on without rewiring.
+// On a hit it anchors and REELS the player straight
 // toward the anchor (Titanfall-style yank): it drives your velocity onto the rope
 // line so the reel is firm and immediate, not a saggy swing. Auto-releases just before
 // the anchor so you launch past instead of splatting; releasing early keeps momentum.
@@ -15,8 +19,9 @@ public class GrappleHook : MonoBehaviour
     public Transform aim;             // camera transform (ray origin + direction)
 
     [Header("Grapple")]
-    [Tooltip("If off, grapple always works without the power-up (dev/testing).")]
-    public bool requirePowerup = true;
+    [Tooltip("Legacy power-up gate. OFF by default — the grapple is a baseline mechanic every " +
+             "player has. Kept only so the timed-pickup path can be re-enabled for testing.")]
+    public bool requirePowerup = false;
     public LayerMask grappleMask = ~0;
     public float maxRange = 60f;
     [Tooltip("How hard you're yanked toward the anchor (m/s^2). Higher = snappier pull.")]

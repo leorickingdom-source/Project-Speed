@@ -4133,7 +4133,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 901c699b29512fd42961daaf1dd42e16, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PassiveLoadout
-  equipped: 01000000
+  passive: 2
 --- !u!114 &1486045628
 MonoBehaviour:
   m_ObjectHideFlags: 0
