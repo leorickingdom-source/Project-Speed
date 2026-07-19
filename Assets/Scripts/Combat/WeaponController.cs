@@ -6,10 +6,9 @@ using UnityEngine.InputSystem;
 // headshots (top slice of a target = bonus damage). Each weapon has a magazine; R reloads.
 // Real-player PvP is hitscan; bots use dodgeable Projectiles.
 //
-// Five hitscan weapons plus two travelling ones (Bow, Knives) that fire a Projectile —
-// the only shots an opponent can see and dodge. The rocket stays shelved (see
-// DefaultLoadout) to keep rocket-jumping out of the game; FireKind.Projectile is still
-// wired, so it can return without rebuilding anything.
+// Five hitscan weapons on keys 1-5. The travelling weapons (Bow, Knives, Crossbow) and the
+// rocket are all shelved in DefaultLoadout but their fire paths — FireKind.Arrow/Projectile,
+// FireArrow(), Projectile.cs, Rocket.cs — stay wired, so any of them returns by uncommenting.
 // Hitscan = instant ray. Arrow = dodgeable travelling shot (Projectile, direct damage).
 // Projectile = travelling shot that explodes (Rocket, splash + self-knockback).
 public enum FireKind { Hitscan, Projectile, Arrow }
@@ -130,24 +129,23 @@ public class WeaponController : MonoBehaviour
         new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
                      damage = 10f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
                      magSize = 6, reloadTime = 1.8f },
-        // The two travelling weapons. Everything above is hitscan, so these are the only
-        // shots an opponent can actually SEE and dodge — that's the point of them, not the
-        // damage. Both trade reliability for a prediction game the loadout otherwise lacks.
-        new Weapon { name = "Bow", kind = FireKind.Arrow, automatic = false, cycle = 0.85f,
-                     damage = 90f, projectileSpeed = 75f, projectileGravity = 0f, projectileRadius = 0.15f,
-                     tracer = new Color(0.85f, 0.80f, 0.60f),
-                     magSize = 5, reloadTime = 1.6f },
-        new Weapon { name = "Knives", kind = FireKind.Arrow, automatic = true, cycle = 0.22f,
-                     damage = 26f, projectileSpeed = 55f, projectileGravity = 4f, projectileRadius = 0.12f,
-                     tracer = new Color(0.75f, 0.80f, 0.85f),
-                     magSize = 12, reloadTime = 1.3f },
-        // Fastest bolt in the game (90) and dead flat, which makes it the most FORGIVING
-        // shot to lead — the way into projectile weapons before the bow's 75 and the
-        // knives' arc. Fire rate sits between knives (0.22) and bow (0.85).
-        new Weapon { name = "Crossbow", kind = FireKind.Arrow, automatic = true, cycle = 0.35f,
-                     damage = 38f, projectileSpeed = 90f, projectileGravity = 0f, projectileRadius = 0.13f,
-                     tracer = new Color(0.70f, 0.65f, 0.55f),
-                     magSize = 8, reloadTime = 1.5f },
+        // Bow / Knives / Crossbow SHELVED (not deleted). All-projectile play was the problem:
+        // direct-hit only (no splash), so a miss is worth nothing, against the fastest
+        // movement in the game — near-misses never punish and fast players become unhittable.
+        // FireKind.Arrow, FireArrow() and Projectile.cs are all intact, so restoring any of
+        // these is uncommenting the entry plus its digit key. Values kept for that.
+        // new Weapon { name = "Bow", kind = FireKind.Arrow, automatic = false, cycle = 0.85f,
+        //              damage = 90f, projectileSpeed = 75f, projectileGravity = 0f, projectileRadius = 0.15f,
+        //              tracer = new Color(0.85f, 0.80f, 0.60f),
+        //              magSize = 5, reloadTime = 1.6f },
+        // new Weapon { name = "Knives", kind = FireKind.Arrow, automatic = true, cycle = 0.22f,
+        //              damage = 26f, projectileSpeed = 55f, projectileGravity = 4f, projectileRadius = 0.12f,
+        //              tracer = new Color(0.75f, 0.80f, 0.85f),
+        //              magSize = 12, reloadTime = 1.3f },
+        // new Weapon { name = "Crossbow", kind = FireKind.Arrow, automatic = true, cycle = 0.35f,
+        //              damage = 38f, projectileSpeed = 90f, projectileGravity = 0f, projectileRadius = 0.13f,
+        //              tracer = new Color(0.70f, 0.65f, 0.55f),
+        //              magSize = 8, reloadTime = 1.5f },
     };
 
     void BuildPool(int n)
@@ -184,9 +182,8 @@ public class WeaponController : MonoBehaviour
             if (kb.digit3Key.wasPressedThisFrame) Current = 2;
             if (kb.digit4Key.wasPressedThisFrame) Current = 3;
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
-            if (kb.digit6Key.wasPressedThisFrame) Current = 5; // Bow
-            if (kb.digit7Key.wasPressedThisFrame) Current = 6; // Knives
-            if (kb.digit8Key.wasPressedThisFrame) Current = 7; // Crossbow
+            // digit6-8 unbound while Bow / Knives / Crossbow are shelved. The Clamp below
+            // would only fold them onto the last weapon, which reads as a stuck key.
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
             if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
             if (kb.rKey.wasPressedThisFrame) StartReload();
