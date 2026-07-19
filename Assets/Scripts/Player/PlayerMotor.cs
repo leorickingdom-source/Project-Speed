@@ -166,6 +166,40 @@ public class PlayerMotor : MonoBehaviour
         Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
     }
 
+    // Snapshot / restore the full mutable sim state. Reconciliation captures the server's
+    // authoritative MotorState, SetState()s it, then replays buffered commands through Step().
+    // Nothing calls these until the network layer exists — pure additions, no behavior change.
+    public MotorState GetState() => new MotorState
+    {
+        position = transform.position,
+        velocity = velocity,
+        grounded = grounded,
+        groundNormal = groundNormal,
+        crouching = crouching,
+        sliding = sliding,
+        height = height,
+        flow = flow,
+        slideBoostCooldown = slideBoostCooldown,
+        dashCooldownLeft = dashCooldownLeft,
+        dashGraceLeft = dashGraceLeft,
+    };
+
+    public void SetState(MotorState s)
+    {
+        transform.position = s.position;
+        velocity = s.velocity;
+        grounded = s.grounded;
+        groundNormal = s.groundNormal;
+        crouching = s.crouching;
+        sliding = s.sliding;
+        height = s.height;
+        flow = s.flow;
+        slideBoostCooldown = s.slideBoostCooldown;
+        dashCooldownLeft = s.dashCooldownLeft;
+        dashGraceLeft = s.dashGraceLeft;
+        UpdateCapsule(); // collider must match the restored height before the next cast
+    }
+
     // Deterministic movement step — the ONLY inputs are `cmd` (facing included) and `dt`, so
     // given the same command it produces the same result on client and server. That's what
     // makes client-side prediction / reconciliation possible: no hidden inputs, no transform
