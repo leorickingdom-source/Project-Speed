@@ -28,8 +28,16 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     public Transform spawnPoint;
 
     [Header("Bounds")]
-    [Tooltip("Fall below this world Y and you die + respawn (out-of-bounds kill plane).")]
-    public float killY = -25f;
+    [Tooltip("Fall below this world Y and you die + respawn. Floor top is y=0, so -10 kills a " +
+             "pit fall in ~0.7s instead of the ~2s the old -25 took, while leaving a brief " +
+             "window to grapple back out.")]
+    public float killY = -10f;
+    [Tooltip("Die if you get farther than this from arena center on X or Z — the SIDE " +
+             "out-of-bounds, so being launched over a wall by a grapple/dash/pad resets you at " +
+             "once instead of arcing out and waiting for the long fall. Square half-extent " +
+             "because the arena is square; walls sit at 45.5, so 48 clears them with margin. " +
+             "0 = off.")]
+    public float killDist = 48f;
 
     public float Hp { get; private set; }
     public bool Alive { get; private set; } = true;
@@ -79,8 +87,14 @@ public class PlayerHealth : MonoBehaviour, IDamageable
             return;
         }
 
-        // Fell out of the world -> instant death (invuln doesn't save you from the void).
-        if (transform.position.y < killY) { Die(); return; }
+        // Out of bounds -> instant death (invuln doesn't save you from the void). Vertical:
+        // fell through the pit or off an edge. Horizontal: launched past the perimeter walls.
+        Vector3 p = transform.position;
+        if (p.y < killY || (killDist > 0f && (Mathf.Abs(p.x) > killDist || Mathf.Abs(p.z) > killDist)))
+        {
+            Die();
+            return;
+        }
 
         if (regenPerSec > 0f && Hp < MaxHp && Time.time - lastDamageTime >= regenDelay)
             Hp = Mathf.Min(MaxHp, Hp + regenPerSec * Time.deltaTime);

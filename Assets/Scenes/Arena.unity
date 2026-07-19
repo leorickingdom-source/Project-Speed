@@ -3602,6 +3602,8 @@ GameObject:
   - component: {fileID: 1486045626}
   - component: {fileID: 1486045627}
   - component: {fileID: 1486045628}
+  - component: {fileID: 1486045630}
+  - component: {fileID: 1486045629}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -3624,7 +3626,6 @@ MonoBehaviour:
   motor: {fileID: 0}
   health: {fileID: 0}
   weapon: {fileID: 0}
-  momentum: {fileID: 0}
 --- !u!114 &1486045615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3961,7 +3962,8 @@ MonoBehaviour:
   regenPerSec: 0
   regenDelay: 3
   spawnPoint: {fileID: 0}
-  killY: -25
+  killY: -10
+  killDist: 48
 --- !u!114 &1486045627
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3992,6 +3994,37 @@ MonoBehaviour:
   fullBonusSpeed: 16
   holdTime: 1
   decayPerSec: 0.5
+--- !u!114 &1486045629
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0efa1e39a3ff7c046a6abe256693dbc0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CamperDamage
+  maxBonus: 1
+  fullBonusSpeed: 4
+  cutoffSpeed: 5
+--- !u!114 &1486045630
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bf7c3fe3911c2e3448cfbff05a25da14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HighgroundDamage
+  maxBonus: 0.4
+  groundLevel: 0
+  rampStartHeight: 2
+  fullBonusHeight: 10
 --- !u!1 &1584700224
 GameObject:
   m_ObjectHideFlags: 0
