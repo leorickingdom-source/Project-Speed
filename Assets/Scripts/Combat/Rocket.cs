@@ -12,6 +12,7 @@ public class Rocket : MonoBehaviour
     public float blastForce = 16f;
     public float selfForce = 22f;   // your own rocket-jump kick
     public float selfDamageScale = 0.5f; // fraction of the blast you take (Quake halves it)
+    public float damageScale = 1f;  // momentum passive multiplier, sampled at launch
     public float damage = 80f;
 
     Vector3 dir;
@@ -46,7 +47,7 @@ public class Rocket : MonoBehaviour
     void Boom(Vector3 p)
     {
         Explosion.Detonate(p, blastRadius, blastForce, selfForce, damage, owner,
-            travelMask, selfDamageScale);
+            travelMask, selfDamageScale, damageScale);
         Destroy(gameObject);
     }
 }

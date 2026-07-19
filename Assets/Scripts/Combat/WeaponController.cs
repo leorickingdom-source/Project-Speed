@@ -65,6 +65,10 @@ public class WeaponController : MonoBehaviour
     public int CurrentMag => CurrentWeapon != null ? CurrentWeapon.magSize : 0;
     public bool Reloading => Time.time < reloadDoneAt;
 
+    MomentumDamage momentum;
+    // Momentum passive multiplier, or 1 when it isn't equipped/present.
+    float DamageScale => momentum != null ? momentum.Scale : 1f;
+
     float nextFire;
     float reloadDoneAt;
     LineRenderer[] pool;
@@ -74,6 +78,7 @@ public class WeaponController : MonoBehaviour
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();
+        momentum = GetComponent<MomentumDamage>(); // optional — absent means no speed bonus
         if (aim == null) { var c = GetComponentInChildren<Camera>(); if (c) aim = c.transform; }
         hitMask &= ~(1 << gameObject.layer);
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
@@ -190,6 +195,7 @@ public class WeaponController : MonoBehaviour
     {
         Vector3 origin = aim.position;
         int shots = Mathf.Max(1, w.pellets);
+        float scale = DamageScale; // sampled once per shot, so every pellet of a spread agrees
         for (int i = 0; i < shots; i++)
         {
             Vector3 dir = aim.forward;
@@ -209,7 +215,7 @@ public class WeaponController : MonoBehaviour
                     // Headshot: hit lands in the top slice of the target's collider.
                     Bounds b = hit.collider.bounds;
                     bool head = hit.point.y >= b.max.y - b.size.y * headFraction;
-                    hp.Damage(head ? w.damage * headMultiplier : w.damage);
+                    hp.Damage((head ? w.damage * headMultiplier : w.damage) * scale);
                 }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
@@ -234,6 +240,7 @@ public class WeaponController : MonoBehaviour
         rocket.blastForce = w.blastForce;
         rocket.selfForce = w.selfForce;
         rocket.selfDamageScale = w.selfDamageScale;
+        rocket.damageScale = DamageScale; // sampled at launch — your speed when you fired
         rocket.Launch(aim.forward, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
     }
 

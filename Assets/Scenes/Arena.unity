@@ -3750,6 +3750,7 @@ GameObject:
   - component: {fileID: 1486045625}
   - component: {fileID: 1486045626}
   - component: {fileID: 1486045627}
+  - component: {fileID: 1486045628}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -3773,6 +3774,7 @@ MonoBehaviour:
   receiver: {fileID: 0}
   health: {fileID: 0}
   weapon: {fileID: 0}
+  momentum: {fileID: 0}
 --- !u!114 &1486045615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4131,7 +4133,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 901c699b29512fd42961daaf1dd42e16, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PassiveLoadout
-  equipped: 
+  equipped: 01000000
+--- !u!114 &1486045628
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b397ff7792a3a8a4b98a8a5eabb94f22, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MomentumDamage
+  maxBonus: 0.25
+  rampStartSpeed: 9
+  fullBonusSpeed: 16
 --- !u!1 &1584700224
 GameObject:
   m_ObjectHideFlags: 0

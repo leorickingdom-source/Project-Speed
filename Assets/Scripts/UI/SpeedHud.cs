@@ -8,6 +8,7 @@ public class SpeedHud : MonoBehaviour
     public PowerupReceiver receiver;
     public PlayerHealth health;
     public WeaponController weapon;
+    public MomentumDamage momentum;
     GUIStyle style;
     readonly List<PowerupSlot> active = new();
 
@@ -21,6 +22,7 @@ public class SpeedHud : MonoBehaviour
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
         if (weapon == null) weapon = FindAnyObjectByType<WeaponController>();
+        if (momentum == null && motor != null) momentum = motor.GetComponent<MomentumDamage>();
     }
 
     void OnGUI()
@@ -36,7 +38,11 @@ public class SpeedHud : MonoBehaviour
         GUI.Label(new Rect(14, 70, 600, 28),
             $"vel  x{motor.velocity.x:0.0}  y{motor.velocity.y:0.0}  z{motor.velocity.z:0.0}", style);
         string stance = motor.sliding ? "SLIDE" : motor.crouching ? "crouch" : "stand";
-        GUI.Label(new Rect(14, 100, 600, 28), $"flow  x{motor.flow:0.00}    [{stance}]", style);
+        // Momentum multiplier is appended rather than given its own row, so the fixed
+        // Y offsets below don't all have to shift. Hidden at 1.00x (passive off / too slow).
+        string dmg = momentum != null && momentum.Scale > 1.001f
+            ? $"    DMG x{momentum.Scale:0.00}" : "";
+        GUI.Label(new Rect(14, 100, 600, 28), $"flow  x{motor.flow:0.00}    [{stance}]{dmg}", style);
 
         // Health.
         if (health != null)

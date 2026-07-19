@@ -26,9 +26,12 @@ public static class Explosion
     /// <param name="blockMask">What counts as cover. Pass the weapon's hit mask so
     /// players don't shield each other — only the map blocks a blast.</param>
     /// <param name="selfDamageScale">Fraction of the blast the owner takes (Quake: 0.5).</param>
+    /// <param name="damageScale">Outgoing multiplier (Momentum passive). Applied to OTHERS
+    /// only — scaling your own rocket-jump blast with speed would punish the exact
+    /// behaviour the passive exists to reward.</param>
     public static void Detonate(Vector3 center, float radius, float force,
         float selfForce, float damage, GameObject owner,
-        LayerMask blockMask, float selfDamageScale = 0.5f)
+        LayerMask blockMask, float selfDamageScale = 0.5f, float damageScale = 1f)
     {
         Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
         foreach (var c in hits)
@@ -49,7 +52,7 @@ public static class Explosion
 
             var hp = c.GetComponentInParent<IDamageable>();
             if (hp != null)
-                hp.Damage(damage * falloff * (self ? selfDamageScale : 1f));
+                hp.Damage(damage * falloff * (self ? selfDamageScale : damageScale));
         }
     }
 

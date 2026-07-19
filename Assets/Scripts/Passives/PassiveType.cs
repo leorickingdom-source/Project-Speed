@@ -5,5 +5,6 @@
 public enum PassiveType
 {
     Vitality,   // +max HP (amount owned by PlayerHealth)
+    Momentum,   // damage scales with your speed (see MomentumDamage)
     Grapple,    // grapple with no pickup required
 }
