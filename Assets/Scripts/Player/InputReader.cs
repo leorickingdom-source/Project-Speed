@@ -13,8 +13,16 @@ public class InputReader : MonoBehaviour
     public bool GrappleHeld { get; private set; }  // right mouse = grapple
     public bool CrouchHeld { get; private set; }   // ctrl / C = crouch + slide
 
+    [Tooltip("Look source, baked into the command so the sim has no hidden facing input.")]
+    public MouseLook look;
+
     bool jumpBuffered;
     bool dashBuffered;
+
+    void Awake()
+    {
+        if (look == null) look = GetComponent<MouseLook>();
+    }
 
     void Update()
     {
@@ -70,5 +78,7 @@ public class InputReader : MonoBehaviour
         crouch = CrouchHeld,
         grapple = GrappleHeld,
         dashPressed = ConsumeDash(),
+        yaw = look != null ? look.Yaw : 0f,
+        pitch = look != null ? look.Pitch : 0f,
     };
 }

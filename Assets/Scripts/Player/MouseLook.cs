@@ -14,6 +14,12 @@ public class MouseLook : MonoBehaviour
 
     float pitch;
 
+    // Exposed so InputReader can bake facing into InputCmd — the sim reads the command, not
+    // the transform, so the server can reproduce a client's movement and aim. Body only yaws,
+    // so eulerAngles.y is the exact horizontal facing.
+    public float Yaw => body != null ? body.eulerAngles.y : 0f;
+    public float Pitch => pitch;
+
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();

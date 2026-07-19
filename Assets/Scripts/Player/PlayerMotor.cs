@@ -13,7 +13,6 @@ public class PlayerMotor : MonoBehaviour
 {
     [Header("Refs")]
     public InputReader input;
-    public Transform yaw;             // direction reference (defaults to this)
 
     [Header("Capsule")]
     [Tooltip("BASE capsule radius. Read the Radius property for the effective value — the " +
@@ -149,7 +148,6 @@ public class PlayerMotor : MonoBehaviour
         if (passives != null) passives.Changed += ApplyPassives;
         ApplyPassives();
         if (input == null) input = GetComponent<InputReader>();
-        if (yaw == null) yaw = transform;
         if (head == null)
         {
             var camT = GetComponentInChildren<Camera>();
@@ -168,10 +166,10 @@ public class PlayerMotor : MonoBehaviour
         Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
     }
 
-    // Deterministic movement step — the ONLY input is `cmd`, so this can be replayed
-    // for client-side prediction / reconciliation later without changing the feel.
-    // (Facing still comes from `yaw`/transform; look angles join the command when
-    // networking lands.)
+    // Deterministic movement step — the ONLY inputs are `cmd` (facing included) and `dt`, so
+    // given the same command it produces the same result on client and server. That's what
+    // makes client-side prediction / reconciliation possible: no hidden inputs, no transform
+    // reads, no Time.time.
     public void Step(InputCmd cmd, float dt)
     {
         // Ticked at the top so the grounded branch below reads it in the same tick it was set.
@@ -292,7 +290,7 @@ public class PlayerMotor : MonoBehaviour
         if (!hasDash || !cmd.dashPressed || dashCooldownLeft > 0f) return;
 
         // No movement input = dash where you look, so the button never silently does nothing.
-        Vector3 dir = wish.sqrMagnitude > 1e-4f ? wish : yaw.forward;
+        Vector3 dir = wish.sqrMagnitude > 1e-4f ? wish : Quaternion.Euler(0f, cmd.yaw, 0f) * Vector3.forward;
         dir.y = 0f;
         if (dir.sqrMagnitude < 1e-4f) return;
         dir.Normalize();
@@ -407,9 +405,10 @@ public class PlayerMotor : MonoBehaviour
 
     Vector3 WishDir(InputCmd cmd)
     {
-        Vector2 mv = cmd.move;
-        Vector3 dir = yaw.right * mv.x + yaw.forward * mv.y;
-        dir.y = 0f;
+        // Facing comes from the COMMAND, not the transform. Quaternion.Euler(0,yaw,0) * (mx,0,my)
+        // equals the old body.right*mx + body.forward*my exactly, because the body only yaws —
+        // so local feel is unchanged while the server can now reproduce the direction.
+        Vector3 dir = Quaternion.Euler(0f, cmd.yaw, 0f) * new Vector3(cmd.move.x, 0f, cmd.move.y);
         return dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.zero;
     }
 

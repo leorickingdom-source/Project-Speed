@@ -12,6 +12,8 @@ public struct InputCmd
     public bool crouch;      // crouch held (crouch / slide)
     public bool grapple;     // grapple button held
     public bool dashPressed; // dash pressed since last tick (buffered, like jumpPressed)
+    public float yaw;        // horizontal facing, degrees — the sim's ONLY facing input
+    public float pitch;      // vertical aim, degrees (reserved for networked shooting)
 
     public static readonly InputCmd None = default;
 }
