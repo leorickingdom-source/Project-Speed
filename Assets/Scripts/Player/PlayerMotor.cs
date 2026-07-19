@@ -43,6 +43,17 @@ public class PlayerMotor : MonoBehaviour
     public bool useAirCap = false;
     public float airCapSpeed = 1.2f;
 
+    [Header("Dash passive")]
+    [Tooltip("Speed the dash brings you UP TO — a floor, not an additive kick. From a walk " +
+             "(9) it is a huge gain; already at 16 it is nearly nothing. Deliberately a " +
+             "catch-up tool rather than a snowball one, so it cannot compound with movement " +
+             "skill. Above this speed a dash is a free instant REDIRECT and adds nothing.")]
+    public float dashSpeed = 18f;
+    [Tooltip("Seconds between dashes. Fixed rather than refreshed on landing: landing-reset " +
+             "would hand a bhopping expert several times the dashes of a new player, stacking " +
+             "a resource gap on top of an execution gap.")]
+    public float dashCooldown = 1.5f;
+
     [Header("Jump / gravity")]
     public float gravity = 22f;
     public float jumpForce = 8f;
@@ -100,6 +111,10 @@ public class PlayerMotor : MonoBehaviour
     // of toggling component.enabled.
     public float Radius { get; private set; }
 
+    // HUD readouts for the Dash passive.
+    public bool HasDash => hasDash;
+    public float DashCooldownLeft => dashCooldownLeft;
+
     // Target speeds fed to PM_Accelerate. Flow always raises the air ceiling; it only
     // raises the ground ceiling if you opt in (see flowRaisesGroundCap).
     float AirWishSpeed => groundSpeed * (useFlow ? flow : 1f);
@@ -116,6 +131,8 @@ public class PlayerMotor : MonoBehaviour
     CapsuleCollider col;
     GrappleHook grapple;
     float slideBoostCooldown;   // counts down on dt so Step() stays replayable
+    float dashCooldownLeft;     // ditto — dt, never Time.time
+    bool hasDash;               // resolved once in Awake
 
     void Awake()
     {
@@ -125,6 +142,7 @@ public class PlayerMotor : MonoBehaviour
         var passives = GetComponent<PassiveLoadout>(); // optional — null means base radius
         Radius = (passives != null && passives.Has(PassiveType.Featherweight))
             ? featherweightRadius : radius;
+        hasDash = passives != null && passives.Has(PassiveType.Dash);
         col.radius = Radius;
         UpdateCapsule();
         if (input == null) input = GetComponent<InputReader>();
@@ -183,6 +201,10 @@ public class PlayerMotor : MonoBehaviour
             Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * dt;
         }
+
+        // Dash lands AFTER accel/gravity so it reads as instant and full-strength; friction
+        // and accel resume next tick. Grapple still gets the last word below.
+        TryDash(cmd, wish, dt);
 
         // Grapple shapes velocity after accel/gravity, before we move (motor = sole mover).
         if (grapple != null) grapple.ApplyTo(ref velocity, transform.position, dt, cmd.grapple);
@@ -246,6 +268,31 @@ public class PlayerMotor : MonoBehaviour
             lp.y = standEyeHeight - (standHeight - height);
             head.localPosition = lp;
         }
+    }
+
+    // Dash passive: burst in your INPUT direction (facing-relative), ground or air, on a
+    // flat cooldown.
+    //
+    // A speed FLOOR, not an additive impulse. Mathf.Max(Speed, dashSpeed) means a walking
+    // player gains a lot and an already-fast one gains almost nothing, so dashing can never
+    // compound with movement skill into runaway speed — above dashSpeed it becomes a free
+    // instant REDIRECT instead, which is a different tool rather than a bigger one. Same
+    // shape as PadBoost's Mathf.Max on Y.
+    void TryDash(InputCmd cmd, Vector3 wish, float dt)
+    {
+        dashCooldownLeft = Mathf.Max(0f, dashCooldownLeft - dt);
+        if (!hasDash || !cmd.dashPressed || dashCooldownLeft > 0f) return;
+
+        // No movement input = dash where you look, so the button never silently does nothing.
+        Vector3 dir = wish.sqrMagnitude > 1e-4f ? wish : yaw.forward;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 1e-4f) return;
+        dir.Normalize();
+
+        float speed = Mathf.Max(Speed, dashSpeed);
+        velocity.x = dir.x * speed;
+        velocity.z = dir.z * speed;   // vertical untouched — a dash never fights gravity
+        dashCooldownLeft = dashCooldown;
     }
 
     // One-time momentum kick on slide entry, clamped to slideMaxSpeed. Never slows you:

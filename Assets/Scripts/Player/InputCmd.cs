@@ -11,6 +11,7 @@ public struct InputCmd
     public bool jumpPressed; // jump pressed since last tick (buffered single jump)
     public bool crouch;      // crouch held (crouch / slide)
     public bool grapple;     // grapple button held
+    public bool dashPressed; // dash pressed since last tick (buffered, like jumpPressed)
 
     public static readonly InputCmd None = default;
 }

@@ -14,6 +14,7 @@ public class GameMenu : MonoBehaviour
         "Mouse  —  look     LMB  —  fire     R  —  reload",
         "1-5  —  Pistol Rifle Sniper SMG Shotgun",
         "RMB  —  grapple (reels you in)",
+        "Shift  —  dash (Dash passive only)",
         "Aim for the head  —  2x damage",
     };
 

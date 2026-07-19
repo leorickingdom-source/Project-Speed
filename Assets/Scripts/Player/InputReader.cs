@@ -14,6 +14,7 @@ public class InputReader : MonoBehaviour
     public bool CrouchHeld { get; private set; }   // ctrl / C = crouch + slide
 
     bool jumpBuffered;
+    bool dashBuffered;
 
     void Update()
     {
@@ -35,6 +36,8 @@ public class InputReader : MonoBehaviour
 
         JumpHeld = kb.spaceKey.isPressed;
         if (kb.spaceKey.wasPressedThisFrame) jumpBuffered = true;
+        if (kb.leftShiftKey.wasPressedThisFrame || kb.rightShiftKey.wasPressedThisFrame)
+            dashBuffered = true;
 
         FireHeld = mouse != null && mouse.leftButton.isPressed;
         GrappleHeld = mouse != null && mouse.rightButton.isPressed;
@@ -51,6 +54,12 @@ public class InputReader : MonoBehaviour
         return false;
     }
 
+    public bool ConsumeDash()
+    {
+        if (dashBuffered) { dashBuffered = false; return true; }
+        return false;
+    }
+
     // Build one tick of movement intent for the motor (consumes the jump buffer).
     // This is the single seam between raw devices and the deterministic sim.
     public InputCmd Sample() => new InputCmd
@@ -60,5 +69,6 @@ public class InputReader : MonoBehaviour
         jumpPressed = ConsumeJump(),
         crouch = CrouchHeld,
         grapple = GrappleHeld,
+        dashPressed = ConsumeDash(),
     };
 }

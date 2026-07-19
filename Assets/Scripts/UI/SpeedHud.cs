@@ -37,7 +37,11 @@ public class SpeedHud : MonoBehaviour
         // Y offsets below don't all have to shift. Hidden at 1.00x (passive off / too slow).
         string dmg = momentum != null && momentum.Scale > 1.001f
             ? $"    DMG x{momentum.Scale:0.00}" : "";
-        GUI.Label(new Rect(14, 100, 600, 28), $"flow  x{motor.flow:0.00}    [{stance}]{dmg}", style);
+        string dash = motor.HasDash
+            ? (motor.DashCooldownLeft > 0f ? $"    dash {motor.DashCooldownLeft:0.0}s" : "    DASH")
+            : "";
+        GUI.Label(new Rect(14, 100, 600, 28),
+            $"flow  x{motor.flow:0.00}    [{stance}]{dmg}{dash}", style);
 
         // Health.
         if (health != null)

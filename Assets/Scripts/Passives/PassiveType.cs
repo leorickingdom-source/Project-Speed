@@ -10,4 +10,5 @@ public enum PassiveType
     Vitality,      // +max HP (amount owned by PlayerHealth)
     Momentum,      // damage scales with your speed (see MomentumDamage)
     Featherweight, // narrower capsule = harder to hit (radius owned by PlayerMotor)
+    Dash,          // burst move in your input direction, on a cooldown (owned by PlayerMotor)
 }
