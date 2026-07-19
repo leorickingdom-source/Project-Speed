@@ -1,7 +1,7 @@
 using UnityEngine;
 
-// The ONE passive this player brings. Persistent by design — unlike PowerupReceiver
-// there is no timer, no pickup and no expiry; a passive is part of the build.
+// The ONE passive this player brings. Persistent by design — no timer, no pickup and no
+// expiry; a passive is part of the build you bring into the match.
 //
 // A single value rather than a list, on purpose. With a list, every passive has to be
 // balanced against simply having it for free, which forces a contrived drawback onto

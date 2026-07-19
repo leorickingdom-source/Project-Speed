@@ -1,23 +1,18 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 // Minimal on-screen readout for tuning movement feel. Replace with real UI later.
 public class SpeedHud : MonoBehaviour
 {
     public PlayerMotor motor;
-    public PowerupReceiver receiver;
     public PlayerHealth health;
     public WeaponController weapon;
     public MomentumDamage momentum;
     GUIStyle style;
-    readonly List<PowerupSlot> active = new();
 
     void Awake()
     {
         if (motor == null) motor = GetComponent<PlayerMotor>();
         if (motor == null) motor = FindAnyObjectByType<PlayerMotor>();
-        if (receiver == null && motor != null) receiver = motor.GetComponent<PowerupReceiver>();
-        if (receiver == null) receiver = FindAnyObjectByType<PowerupReceiver>();
         if (health == null && motor != null) health = motor.GetComponent<PlayerHealth>();
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
@@ -58,18 +53,6 @@ public class SpeedHud : MonoBehaviour
         {
             string ammo = weapon.Reloading ? "reloading..." : $"{weapon.CurrentAmmo}/{weapon.CurrentMag}";
             GUI.Label(new Rect(14, 162, 600, 28), $"WEAPON  {weapon.CurrentName}   {ammo}   [R] reload", style);
-        }
-
-        // Active power-ups + countdowns.
-        if (receiver != null)
-        {
-            receiver.GetActive(active);
-            float y = 192f;
-            foreach (var s in active)
-            {
-                GUI.Label(new Rect(14, y, 600, 28), $"{s.Type}  {s.Remaining:0.0}s", style);
-                y += 30f;
-            }
         }
 
         // Center crosshair dot (aim point for the grapple).

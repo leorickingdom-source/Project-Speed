@@ -3,8 +3,7 @@ using UnityEngine;
 // Grapple reel — BASELINE for every player: right mouse always works, no pickup and no
 // loadout slot. It is the traversal verb the game is built around, so gating it would
 // mean some players simply are not playing the movement game (cf. Warsow's dash,
-// Titanfall's wall-run). The power-up gate below is kept, defaulted off, so the timed
-// pickup path can be switched back on without rewiring.
+// Titanfall's wall-run).
 // On a hit it anchors and REELS the player straight
 // toward the anchor (Titanfall-style yank): it drives your velocity onto the rope
 // line so the reel is firm and immediate, not a saggy swing. Auto-releases just before
@@ -19,9 +18,6 @@ public class GrappleHook : MonoBehaviour
     public Transform aim;             // camera transform (ray origin + direction)
 
     [Header("Grapple")]
-    [Tooltip("Legacy power-up gate. OFF by default — the grapple is a baseline mechanic every " +
-             "player has. Kept only so the timed-pickup path can be re-enabled for testing.")]
-    public bool requirePowerup = false;
     public LayerMask grappleMask = ~0;
     public float maxRange = 60f;
     [Tooltip("How hard you're yanked toward the anchor (m/s^2). Higher = snappier pull.")]
@@ -39,14 +35,12 @@ public class GrappleHook : MonoBehaviour
     public Vector3 Anchor { get; private set; }
 
     LineRenderer line;
-    PowerupReceiver receiver;          // grapple is inert unless this says it's active
     bool wasHeld;
     const float center = 1f;          // pull reference = feet + up*center (capsule middle)
 
     void Awake()
     {
         line = GetComponent<LineRenderer>();
-        receiver = GetComponent<PowerupReceiver>();
         if (aim == null)
         {
             var c = GetComponentInChildren<Camera>();
@@ -80,16 +74,6 @@ public class GrappleHook : MonoBehaviour
     public void ApplyTo(ref Vector3 velocity, Vector3 pos, float dt, bool grappleHeld)
     {
         if (aim == null) return;
-
-        // Power-up gated (unless requirePowerup is off): inert when the Grapple power-up
-        // isn't active. Drop any live rope and swallow the current press so it can't
-        // auto-fire the instant a fresh pickup activates while the button is already held.
-        if (requirePowerup && (receiver == null || !receiver.IsActive(PowerupType.Grapple)))
-        {
-            if (Attached) Attached = false;
-            wasHeld = grappleHeld;
-            return;
-        }
 
         bool held = grappleHeld;
         if (held && !wasHeld) TryAttach();
