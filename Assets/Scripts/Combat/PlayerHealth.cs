@@ -8,7 +8,15 @@ using UnityEngine;
 public class PlayerHealth : MonoBehaviour, IDamageable
 {
     [Header("Health")]
-    public float maxHp = 100f;
+    [Tooltip("BASE max HP, before passives. Read MaxHp for the effective value. 150 keeps the " +
+             "sniper a 2-shot body kill (100 dmg) while a headshot (200) still one-shots — so " +
+             "aim is rewarded and a body hit leaves a real counterplay window.")]
+    public float maxHp = 150f;
+    [Tooltip("Extra max HP from the Vitality passive. 40 (not 50) on purpose: at 190 a sniper " +
+             "body shot is still a 2-shot and a headshot still one-shots, both with margin. " +
+             "50 would land you on exactly 200, where BOTH of those sit at zero margin and any " +
+             "later tweak to sniper damage or headMultiplier silently flips lethality.")]
+    public float vitalityBonusHp = 40f;
     public float respawnDelay = 1.5f;
     public float spawnInvuln = 2f;         // no damage for this long after (re)spawn
 
@@ -27,7 +35,13 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     public bool Alive { get; private set; } = true;
     public bool Invulnerable => Time.time < invulnUntil;
 
+    // Effective ceiling = base + passives. Everything that clamps or refills reads THIS,
+    // never the raw maxHp field, so equipping Vitality can't leave you capped at the base.
+    public float MaxHp => maxHp + (passives != null && passives.Has(PassiveType.Vitality)
+        ? vitalityBonusHp : 0f);
+
     PlayerMotor motor;
+    PassiveLoadout passives;
     Vector3 spawnPos;
     Quaternion spawnRot;
     float invulnUntil;
@@ -37,9 +51,10 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     void Awake()
     {
         motor = GetComponent<PlayerMotor>();
+        passives = GetComponent<PassiveLoadout>(); // optional — null means no passives equipped
         if (spawnPoint != null) { spawnPos = spawnPoint.position; spawnRot = spawnPoint.rotation; }
         else { spawnPos = transform.position; spawnRot = transform.rotation; }
-        Hp = maxHp;
+        Hp = MaxHp;
         invulnUntil = Time.time + spawnInvuln;
     }
 
@@ -53,7 +68,7 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     public void Heal(float amount)
     {
-        if (Alive && amount > 0f) Hp = Mathf.Min(maxHp, Hp + amount);
+        if (Alive && amount > 0f) Hp = Mathf.Min(MaxHp, Hp + amount);
     }
 
     void Update()
@@ -67,8 +82,8 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         // Fell out of the world -> instant death (invuln doesn't save you from the void).
         if (transform.position.y < killY) { Die(); return; }
 
-        if (regenPerSec > 0f && Hp < maxHp && Time.time - lastDamageTime >= regenDelay)
-            Hp = Mathf.Min(maxHp, Hp + regenPerSec * Time.deltaTime);
+        if (regenPerSec > 0f && Hp < MaxHp && Time.time - lastDamageTime >= regenDelay)
+            Hp = Mathf.Min(MaxHp, Hp + regenPerSec * Time.deltaTime);
     }
 
     void Die()
@@ -84,7 +99,7 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         transform.SetPositionAndRotation(spawnPos, spawnRot);
         motor.velocity = Vector3.zero;
         motor.Frozen = false;
-        Hp = maxHp;
+        Hp = MaxHp;
         Alive = true;
         invulnUntil = Time.time + spawnInvuln;
     }

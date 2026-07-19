@@ -3749,6 +3749,7 @@ GameObject:
   - component: {fileID: 1486045624}
   - component: {fileID: 1486045625}
   - component: {fileID: 1486045626}
+  - component: {fileID: 1486045627}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -3831,11 +3832,14 @@ MonoBehaviour:
   standEyeHeight: 1.6
   slideEnterSpeed: 6
   slideBoost: 1.35
+  slideMaxSpeed: 16
+  slideCooldown: 0.4
   slideFriction: 0.7
   slideTurnRate: 4
   slideSlopeAccel: 18
   slideMinSpeed: 3
   useFlow: 1
+  flowRaisesGroundCap: 0
   flowMax: 1.8
   flowGainPerSec: 0.45
   flowDecayPerSec: 1.5
@@ -4107,13 +4111,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a8b210c39cf8494388b50a3d75b80d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
-  maxHp: 100
+  maxHp: 150
+  vitalityBonusHp: 40
   respawnDelay: 1.5
   spawnInvuln: 2
   regenPerSec: 0
   regenDelay: 3
   spawnPoint: {fileID: 0}
   killY: -25
+--- !u!114 &1486045627
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 901c699b29512fd42961daaf1dd42e16, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PassiveLoadout
+  equipped: 
 --- !u!1 &1584700224
 GameObject:
   m_ObjectHideFlags: 0
