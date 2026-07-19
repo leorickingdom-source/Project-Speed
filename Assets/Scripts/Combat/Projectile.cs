@@ -1,27 +1,39 @@
 using UnityEngine;
 
-// Simple dodgeable projectile for AI (bots). Manually swept with a SphereCast so it
-// can't tunnel at speed; deals direct damage to the first IDamageable it hits, then
-// despawns. No splash — clean and readable so the player can strafe/slide/grapple
-// around it. Real-player weapons are hitscan (WeaponController); this is AI only.
+// Dodgeable travelling shot — bot attacks, and the player's bow / throwing knives.
+// Manually swept with a SphereCast so it can't tunnel at speed; deals direct damage to
+// the first IDamageable it hits, then despawns. No splash (that's Rocket).
+//
+// Velocity-based rather than direction-plus-speed so `gravity` can arc it. gravity 0 is
+// a flat shot, which is what the bot attacks and the bow both use: realistic arrows drop,
+// but leading a target that dashes and grapples at 18+ m/s is already hard enough without
+// solving a ballistic arc on top of it.
 public class Projectile : MonoBehaviour
 {
     public float speed = 22f;
+    public float gravity = 0f;      // 0 = flat. Arc is a per-weapon choice.
     public float life = 5f;
     public float damage = 15f;
     public float castRadius = 0.2f;
 
-    Vector3 dir;
+    [Header("Headshots")]
+    public float headMultiplier = 2f;
+    [Range(0f, 1f)] public float headFraction = 0.28f;
+
+    [Header("Passives")]
+    public float damageScale = 1f;  // Momentum / Highground / Camper, sampled at launch
+
+    Vector3 vel;
     LayerMask mask = ~0;
     GameObject owner;
 
     public void Launch(Vector3 direction, float dmg, LayerMask hitMask, GameObject shooter)
     {
-        dir = direction.normalized;
+        vel = direction.normalized * speed;
         damage = dmg;
         mask = hitMask;
         owner = shooter;
-        if (dir.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(dir);
+        if (vel.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(vel);
     }
 
     void FixedUpdate()
@@ -30,16 +42,27 @@ public class Projectile : MonoBehaviour
         life -= dt;
         if (life <= 0f) { Destroy(gameObject); return; }
 
-        float step = speed * dt;
+        vel.y -= gravity * dt;
+
+        float step = vel.magnitude * dt;
+        if (step <= 0f) return;
+        Vector3 dir = vel / vel.magnitude;
+
         if (Physics.SphereCast(transform.position, castRadius, dir, out RaycastHit hit,
                 step, mask, QueryTriggerInteraction.Ignore)
             && hit.collider.gameObject != owner)
         {
             var dmg = hit.collider.GetComponentInParent<IDamageable>();
-            if (dmg != null) dmg.Damage(damage);
+            if (dmg != null)
+            {
+                bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
+                dmg.Damage(damage * (head ? headMultiplier : 1f) * damageScale);
+            }
             Destroy(gameObject);
             return;
         }
+
         transform.position += dir * step;
+        transform.rotation = Quaternion.LookRotation(dir); // nose follows the arc
     }
 }

@@ -6,10 +6,13 @@ using UnityEngine.InputSystem;
 // headshots (top slice of a target = bonus damage). Each weapon has a magazine; R reloads.
 // Real-player PvP is hitscan; bots use dodgeable Projectiles.
 //
-// The loadout is currently all-hitscan: the rocket is shelved (see DefaultLoadout) to keep
-// rocket-jumping out of the game. The FireKind.Projectile path below is still live and
-// tested, so a projectile weapon can come back without rebuilding anything.
-public enum FireKind { Hitscan, Projectile }
+// Five hitscan weapons plus two travelling ones (Bow, Knives) that fire a Projectile —
+// the only shots an opponent can see and dodge. The rocket stays shelved (see
+// DefaultLoadout) to keep rocket-jumping out of the game; FireKind.Projectile is still
+// wired, so it can return without rebuilding anything.
+// Hitscan = instant ray. Arrow = dodgeable travelling shot (Projectile, direct damage).
+// Projectile = travelling shot that explodes (Rocket, splash + self-knockback).
+public enum FireKind { Hitscan, Projectile, Arrow }
 
 [System.Serializable]
 public class Weapon
@@ -26,8 +29,13 @@ public class Weapon
     public float range = 200f;
     public Color tracer = Color.white;
 
-    [Header("Projectile (rocket)")]
+    [Header("Projectile (rocket / arrow)")]
     public float projectileSpeed = 40f;
+    [Tooltip("Arrow only. Downward accel on the shot. 0 = flat. Realistic drop plus a target " +
+             "dashing at 18 m/s is brutal to lead, so keep this small or zero.")]
+    public float projectileGravity = 0f;
+    [Tooltip("Arrow only. Radius of the sweep used for hit detection.")]
+    public float projectileRadius = 0.15f;
     public float blastRadius = 5f;
     public float blastDamage = 90f;
     public float blastForce = 16f;     // knockback to others
@@ -122,6 +130,17 @@ public class WeaponController : MonoBehaviour
         new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
                      damage = 10f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
                      magSize = 6, reloadTime = 1.8f },
+        // The two travelling weapons. Everything above is hitscan, so these are the only
+        // shots an opponent can actually SEE and dodge — that's the point of them, not the
+        // damage. Both trade reliability for a prediction game the loadout otherwise lacks.
+        new Weapon { name = "Bow", kind = FireKind.Arrow, automatic = false, cycle = 0.85f,
+                     damage = 90f, projectileSpeed = 75f, projectileGravity = 0f, projectileRadius = 0.15f,
+                     tracer = new Color(0.85f, 0.80f, 0.60f),
+                     magSize = 5, reloadTime = 1.6f },
+        new Weapon { name = "Knives", kind = FireKind.Arrow, automatic = true, cycle = 0.22f,
+                     damage = 26f, projectileSpeed = 55f, projectileGravity = 4f, projectileRadius = 0.12f,
+                     tracer = new Color(0.75f, 0.80f, 0.85f),
+                     magSize = 12, reloadTime = 1.3f },
     };
 
     void BuildPool(int n)
@@ -158,8 +177,8 @@ public class WeaponController : MonoBehaviour
             if (kb.digit3Key.wasPressedThisFrame) Current = 2;
             if (kb.digit4Key.wasPressedThisFrame) Current = 3;
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
-            // digit6 unbound while the rocket is shelved — the Clamp below would only
-            // fold it onto the last weapon, which reads as a stuck key rather than a no-op.
+            if (kb.digit6Key.wasPressedThisFrame) Current = 5; // Bow
+            if (kb.digit7Key.wasPressedThisFrame) Current = 6; // Knives
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
             if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
             if (kb.rKey.wasPressedThisFrame) StartReload();
@@ -205,6 +224,7 @@ public class WeaponController : MonoBehaviour
     {
         if (aim == null) return;
         if (w.kind == FireKind.Projectile) FireProjectile(w);
+        else if (w.kind == FireKind.Arrow) FireArrow(w);
         else FireHitscan(w);
     }
 
@@ -230,13 +250,36 @@ public class WeaponController : MonoBehaviour
                 if (hp != null)
                 {
                     // Headshot: hit lands in the top slice of the target's collider.
-                    Bounds b = hit.collider.bounds;
-                    bool head = hit.point.y >= b.max.y - b.size.y * headFraction;
+                    bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
                     hp.Damage((head ? w.damage * headMultiplier : w.damage) * scale);
                 }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
         }
+    }
+
+    // Dodgeable travelling shot (bow / knives). Same spawn shape as FireProjectile but it
+    // builds a Projectile — direct damage, no splash, no self-knockback — so these can't
+    // be used to launch yourself the way the shelved rocket could.
+    void FireArrow(Weapon w)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        go.name = w.name;
+        go.transform.position = aim.position + aim.forward * 0.6f;
+        go.transform.localScale = new Vector3(0.08f, 0.25f, 0.08f);
+        Destroy(go.GetComponent<Collider>()); // Projectile sweeps with SphereCast
+        var rend = go.GetComponent<Renderer>();
+        if (rend.material.HasProperty("_BaseColor")) rend.material.SetColor("_BaseColor", w.tracer);
+        rend.material.color = w.tracer;
+
+        var proj = go.AddComponent<Projectile>();
+        proj.speed = w.projectileSpeed;
+        proj.gravity = w.projectileGravity;
+        proj.castRadius = w.projectileRadius;
+        proj.headMultiplier = headMultiplier;
+        proj.headFraction = headFraction;
+        proj.damageScale = DamageScale;  // sampled at launch, like the rocket
+        proj.Launch(aim.forward, w.damage, hitMask, gameObject);
     }
 
     void FireProjectile(Weapon w)
