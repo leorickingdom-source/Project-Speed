@@ -29,6 +29,9 @@ public class Weapon
     public float blastDamage = 90f;
     public float blastForce = 16f;     // knockback to others
     public float selfForce = 24f;      // your own rocket-jump kick
+    [Tooltip("Fraction of your own blast you take. Quake halves it so rocket-jumping is " +
+             "repeatable; at 1 a single jump costs ~70% of your health.")]
+    [Range(0f, 1f)] public float selfDamageScale = 0.5f;
 
     [Header("Ammo")]
     public int magSize = 15;
@@ -230,6 +233,7 @@ public class WeaponController : MonoBehaviour
         rocket.damage = w.blastDamage;
         rocket.blastForce = w.blastForce;
         rocket.selfForce = w.selfForce;
+        rocket.selfDamageScale = w.selfDamageScale;
         rocket.Launch(aim.forward, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
     }
 

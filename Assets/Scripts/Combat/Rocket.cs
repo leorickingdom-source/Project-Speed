@@ -11,6 +11,7 @@ public class Rocket : MonoBehaviour
     public float blastRadius = 5f;
     public float blastForce = 16f;
     public float selfForce = 22f;   // your own rocket-jump kick
+    public float selfDamageScale = 0.5f; // fraction of the blast you take (Quake halves it)
     public float damage = 80f;
 
     Vector3 dir;
@@ -34,14 +35,18 @@ public class Rocket : MonoBehaviour
         float step = speed * dt;
         if (Physics.SphereCast(transform.position, castRadius, dir, out RaycastHit hit,
                 step, travelMask, QueryTriggerInteraction.Ignore))
-            Boom(hit.point);
+            // Detonate at the sphere's CENTRE on contact, not on the surface itself: a
+            // blast sitting exactly on a wall would fail its own line-of-sight traces
+            // (they'd all start inside that wall) and shield everyone from everything.
+            Boom(hit.point + hit.normal * castRadius);
         else
             transform.position += dir * step;
     }
 
     void Boom(Vector3 p)
     {
-        Explosion.Detonate(p, blastRadius, blastForce, selfForce, damage, owner);
+        Explosion.Detonate(p, blastRadius, blastForce, selfForce, damage, owner,
+            travelMask, selfDamageScale);
         Destroy(gameObject);
     }
 }
