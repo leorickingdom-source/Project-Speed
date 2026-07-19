@@ -141,6 +141,13 @@ public class WeaponController : MonoBehaviour
                      damage = 26f, projectileSpeed = 55f, projectileGravity = 4f, projectileRadius = 0.12f,
                      tracer = new Color(0.75f, 0.80f, 0.85f),
                      magSize = 12, reloadTime = 1.3f },
+        // Fastest bolt in the game (90) and dead flat, which makes it the most FORGIVING
+        // shot to lead — the way into projectile weapons before the bow's 75 and the
+        // knives' arc. Fire rate sits between knives (0.22) and bow (0.85).
+        new Weapon { name = "Crossbow", kind = FireKind.Arrow, automatic = true, cycle = 0.35f,
+                     damage = 38f, projectileSpeed = 90f, projectileGravity = 0f, projectileRadius = 0.13f,
+                     tracer = new Color(0.70f, 0.65f, 0.55f),
+                     magSize = 8, reloadTime = 1.5f },
     };
 
     void BuildPool(int n)
@@ -179,6 +186,7 @@ public class WeaponController : MonoBehaviour
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
             if (kb.digit6Key.wasPressedThisFrame) Current = 5; // Bow
             if (kb.digit7Key.wasPressedThisFrame) Current = 6; // Knives
+            if (kb.digit8Key.wasPressedThisFrame) Current = 7; // Crossbow
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
             if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
             if (kb.rKey.wasPressedThisFrame) StartReload();
