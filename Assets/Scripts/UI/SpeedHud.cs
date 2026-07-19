@@ -6,7 +6,6 @@ public class SpeedHud : MonoBehaviour
     public PlayerMotor motor;
     public PlayerHealth health;
     public WeaponController weapon;
-    public MomentumDamage momentum;
     GUIStyle style;
 
     void Awake()
@@ -17,7 +16,6 @@ public class SpeedHud : MonoBehaviour
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
         if (weapon == null) weapon = FindAnyObjectByType<WeaponController>();
-        if (momentum == null && motor != null) momentum = motor.GetComponent<MomentumDamage>();
     }
 
     void OnGUI()
@@ -35,8 +33,9 @@ public class SpeedHud : MonoBehaviour
         string stance = motor.sliding ? "SLIDE" : motor.crouching ? "crouch" : "stand";
         // Momentum multiplier is appended rather than given its own row, so the fixed
         // Y offsets below don't all have to shift. Hidden at 1.00x (passive off / too slow).
-        string dmg = momentum != null && momentum.Scale > 1.001f
-            ? $"    DMG x{momentum.Scale:0.00}" : "";
+        // Reads the weapon's combined multiplier, so any damage passive shows up here.
+        string dmg = weapon != null && weapon.DamageScale > 1.001f
+            ? $"    DMG x{weapon.DamageScale:0.00}" : "";
         string dash = motor.HasDash
             ? (motor.DashCooldownLeft > 0f ? $"    dash {motor.DashCooldownLeft:0.0}s" : "    DASH")
             : "";

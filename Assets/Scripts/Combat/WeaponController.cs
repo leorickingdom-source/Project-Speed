@@ -69,8 +69,13 @@ public class WeaponController : MonoBehaviour
     public bool Reloading => Time.time < reloadDoneAt;
 
     MomentumDamage momentum;
-    // Momentum passive multiplier, or 1 when it isn't equipped/present.
-    float DamageScale => momentum != null ? momentum.Scale : 1f;
+    HighgroundDamage highground;
+
+    // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
+    // pick-one means at most one is ever above 1 — multiplying keeps it correct either way
+    // and means a new damage passive only has to be added here.
+    public float DamageScale => (momentum != null ? momentum.Scale : 1f)
+                              * (highground != null ? highground.Scale : 1f);
 
     float nextFire;
     float reloadDoneAt;
@@ -81,7 +86,8 @@ public class WeaponController : MonoBehaviour
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();
-        momentum = GetComponent<MomentumDamage>(); // optional — absent means no speed bonus
+        momentum = GetComponent<MomentumDamage>();     // optional — absent means no speed bonus
+        highground = GetComponent<HighgroundDamage>(); // optional — absent means no height bonus
         if (aim == null) { var c = GetComponentInChildren<Camera>(); if (c) aim = c.transform; }
         hitMask &= ~(1 << gameObject.layer);
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
