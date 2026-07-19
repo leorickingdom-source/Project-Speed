@@ -1,11 +1,14 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Data-driven loadout. Keys 1-5 select a weapon; left mouse fires (held for automatic
+// Data-driven loadout. Number keys select a weapon; left mouse fires (held for automatic
 // weapons, click for semi). Hitscan weapons raycast + draw a pooled tracer and can score
-// headshots (top slice of a target = bonus damage); the rocket spawns a swept Rocket that
-// explodes (splash + rocket-jump). Each weapon has a magazine; R reloads. Real-player PvP
-// is hitscan; bots use dodgeable Projectiles.
+// headshots (top slice of a target = bonus damage). Each weapon has a magazine; R reloads.
+// Real-player PvP is hitscan; bots use dodgeable Projectiles.
+//
+// The loadout is currently all-hitscan: the rocket is shelved (see DefaultLoadout) to keep
+// rocket-jumping out of the game. The FireKind.Projectile path below is still live and
+// tested, so a projectile weapon can come back without rebuilding anything.
 public enum FireKind { Hitscan, Projectile }
 
 [System.Serializable]
@@ -94,9 +97,13 @@ public class WeaponController : MonoBehaviour
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
                      damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
                      magSize = 30, reloadTime = 1.6f },
-        new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true,  cycle = 0.9f,
-                     projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
-                     magSize = 4, reloadTime = 2.2f },
+        // Rocket SHELVED (not deleted) — rocket-jumping is a Quake signature and this game
+        // is deliberately diverging from it. Everything it needs still works: FireKind
+        // .Projectile, FireProjectile(), Rocket.cs and Explosion.cs are all intact, so
+        // restoring it is re-adding this entry (plus a digit key below) and nothing else.
+        // new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true,  cycle = 0.9f,
+        //              projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
+        //              magSize = 4, reloadTime = 2.2f },
         new Weapon { name = "Sniper", kind = FireKind.Hitscan, automatic = true,  cycle = 1.2f,
                      damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f),
                      magSize = 5, reloadTime = 1.8f },
@@ -142,7 +149,8 @@ public class WeaponController : MonoBehaviour
             if (kb.digit3Key.wasPressedThisFrame) Current = 2;
             if (kb.digit4Key.wasPressedThisFrame) Current = 3;
             if (kb.digit5Key.wasPressedThisFrame) Current = 4;
-            if (kb.digit6Key.wasPressedThisFrame) Current = 5;
+            // digit6 unbound while the rocket is shelved — the Clamp below would only
+            // fold it onto the last weapon, which reads as a stuck key rather than a no-op.
             Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
             if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
             if (kb.rKey.wasPressedThisFrame) StartReload();
