@@ -3604,6 +3604,7 @@ GameObject:
   - component: {fileID: 1486045628}
   - component: {fileID: 1486045630}
   - component: {fileID: 1486045629}
+  - component: {fileID: 1486045631}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -4025,6 +4026,19 @@ MonoBehaviour:
   groundLevel: 0
   rampStartHeight: 2
   fullBonusHeight: 10
+--- !u!114 &1486045631
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1486045613}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2eb0c344fc6f1db4b9508da208dd0689, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PassivePicker
+  loadout: {fileID: 0}
 --- !u!1 &1584700224
 GameObject:
   m_ObjectHideFlags: 0

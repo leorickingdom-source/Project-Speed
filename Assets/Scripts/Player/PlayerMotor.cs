@@ -134,6 +134,7 @@ public class PlayerMotor : MonoBehaviour
 
     CapsuleCollider col;
     GrappleHook grapple;
+    PassiveLoadout passives;    // optional — null means base radius / no dash
     float slideBoostCooldown;   // counts down on dt so Step() stays replayable
     float dashCooldownLeft;     // ditto — dt, never Time.time
     float dashGraceLeft;        // friction-immunity window after a dash
@@ -144,12 +145,9 @@ public class PlayerMotor : MonoBehaviour
         col = GetComponent<CapsuleCollider>();
         grapple = GetComponent<GrappleHook>();
         height = standHeight;
-        var passives = GetComponent<PassiveLoadout>(); // optional — null means base radius
-        Radius = (passives != null && passives.Has(PassiveType.Featherweight))
-            ? featherweightRadius : radius;
-        hasDash = passives != null && passives.Has(PassiveType.Dash);
-        col.radius = Radius;
-        UpdateCapsule();
+        passives = GetComponent<PassiveLoadout>();
+        if (passives != null) passives.Changed += ApplyPassives;
+        ApplyPassives();
         if (input == null) input = GetComponent<InputReader>();
         if (yaw == null) yaw = transform;
         if (head == null)
@@ -319,6 +317,23 @@ public class PlayerMotor : MonoBehaviour
         velocity.x *= scale;
         velocity.z *= scale;
         slideBoostCooldown = slideCooldown;
+    }
+
+    // Resolve the passives this motor CACHES (radius, dash) — the others are read live by
+    // their own components. Runs once in Awake and again whenever the loadout changes, so the
+    // in-game picker can swap Featherweight/Dash live instead of only at scene load.
+    void ApplyPassives()
+    {
+        Radius = (passives != null && passives.Has(PassiveType.Featherweight))
+            ? featherweightRadius : radius;
+        hasDash = passives != null && passives.Has(PassiveType.Dash);
+        col.radius = Radius;
+        UpdateCapsule();
+    }
+
+    void OnDestroy()
+    {
+        if (passives != null) passives.Changed -= ApplyPassives;
     }
 
     void UpdateCapsule()

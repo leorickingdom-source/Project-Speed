@@ -16,6 +16,19 @@ public class PassiveLoadout : MonoBehaviour
     [Tooltip("The single passive this player brings into the match. None = no passive.")]
     public PassiveType passive = PassiveType.None;
 
+    // Fired when the passive changes at runtime. Cached consumers (PlayerMotor's radius and
+    // dash flag, resolved once in Awake) subscribe to re-resolve; live readers that call
+    // Has() every frame don't need it.
+    public event System.Action Changed;
+
     // Guards None so Has(None) is false rather than matching an empty loadout.
     public bool Has(PassiveType type) => type != PassiveType.None && passive == type;
+
+    // Swap the passive at runtime (the testing picker). Fires Changed so cached state updates.
+    public void Equip(PassiveType type)
+    {
+        if (type == passive) return;
+        passive = type;
+        Changed?.Invoke();
+    }
 }
