@@ -6,7 +6,8 @@
 // Titanfall's wall-run — the signature verb is free, and choices sit on top of it.
 public enum PassiveType
 {
-    None,       // no passive equipped
-    Vitality,   // +max HP (amount owned by PlayerHealth)
-    Momentum,   // damage scales with your speed (see MomentumDamage)
+    None,          // no passive equipped
+    Vitality,      // +max HP (amount owned by PlayerHealth)
+    Momentum,      // damage scales with your speed (see MomentumDamage)
+    Featherweight, // narrower capsule = harder to hit (radius owned by PlayerMotor)
 }

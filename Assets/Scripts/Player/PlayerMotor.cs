@@ -16,7 +16,14 @@ public class PlayerMotor : MonoBehaviour
     public Transform yaw;             // direction reference (defaults to this)
 
     [Header("Capsule")]
+    [Tooltip("BASE capsule radius. Read the Radius property for the effective value — the " +
+             "Featherweight passive narrows it.")]
     public float radius = 0.5f;
+    [Tooltip("Capsule radius while the Featherweight passive is equipped. 0.4 vs 0.5 is a 20% " +
+             "narrower silhouette, so hitscan misses more often. HEIGHT is deliberately left " +
+             "alone: shrinking it would drag the camera down with it (standEyeHeight derives " +
+             "from it) and change how you fit the slide tunnel — much bigger change, same benefit.")]
+    public float featherweightRadius = 0.4f;
     public float height = 2f;
     public LayerMask groundMask = ~0; // self is skipped explicitly
     public float skin = 0.02f;
@@ -86,6 +93,13 @@ public class PlayerMotor : MonoBehaviour
 
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
 
+    // Effective capsule radius: base, or featherweightRadius when that passive is equipped.
+    // Resolved once in Awake into an AUTO-PROPERTY rather than assigned back over `radius`,
+    // because `radius` is serialized — writing a passive's value into it at runtime could
+    // leak into a saved scene. Same trap that made the death freeze a runtime flag instead
+    // of toggling component.enabled.
+    public float Radius { get; private set; }
+
     // Target speeds fed to PM_Accelerate. Flow always raises the air ceiling; it only
     // raises the ground ceiling if you opt in (see flowRaisesGroundCap).
     float AirWishSpeed => groundSpeed * (useFlow ? flow : 1f);
@@ -108,7 +122,10 @@ public class PlayerMotor : MonoBehaviour
         col = GetComponent<CapsuleCollider>();
         grapple = GetComponent<GrappleHook>();
         height = standHeight;
-        col.radius = radius;
+        var passives = GetComponent<PassiveLoadout>(); // optional — null means base radius
+        Radius = (passives != null && passives.Has(PassiveType.Featherweight))
+            ? featherweightRadius : radius;
+        col.radius = Radius;
         UpdateCapsule();
         if (input == null) input = GetComponent<InputReader>();
         if (yaw == null) yaw = transform;
@@ -293,8 +310,8 @@ public class PlayerMotor : MonoBehaviour
     {
         float delta = targetHeight - height;
         if (delta <= 0.001f) return true;
-        Vector3 crown = transform.position + Vector3.up * (height - radius);
-        return !(Physics.SphereCast(crown, radius - 0.02f, Vector3.up, out RaycastHit hit,
+        Vector3 crown = transform.position + Vector3.up * (height - Radius);
+        return !(Physics.SphereCast(crown, Radius - 0.02f, Vector3.up, out RaycastHit hit,
                      delta + 0.02f, groundMask, QueryTriggerInteraction.Ignore)
                  && hit.collider != col);
     }
@@ -363,9 +380,9 @@ public class PlayerMotor : MonoBehaviour
 
         // Start the probe above the feet so it never begins overlapping the floor
         // (casts ignore initial overlaps, which would falsely report "no ground").
-        Vector3 origin = transform.position + Vector3.up * (radius + 0.1f);
+        Vector3 origin = transform.position + Vector3.up * (Radius + 0.1f);
         float castDist = 0.1f + groundProbe;
-        if (Physics.SphereCast(origin, radius * 0.85f, Vector3.down, out RaycastHit hit,
+        if (Physics.SphereCast(origin, Radius * 0.85f, Vector3.down, out RaycastHit hit,
                 castDist, groundMask, QueryTriggerInteraction.Ignore)
             && hit.collider != col
             && Vector3.Angle(hit.normal, Vector3.up) <= slopeLimit)
@@ -385,7 +402,7 @@ public class PlayerMotor : MonoBehaviour
             Vector3 dir = motion / dist;
             GetCapsule(pos, out Vector3 p1, out Vector3 p2);
 
-            if (Physics.CapsuleCast(p1, p2, radius, dir, out RaycastHit hit,
+            if (Physics.CapsuleCast(p1, p2, Radius, dir, out RaycastHit hit,
                     dist + skin, groundMask, QueryTriggerInteraction.Ignore)
                 && hit.collider != col)
             {
@@ -408,7 +425,7 @@ public class PlayerMotor : MonoBehaviour
     void Depenetrate(ref Vector3 pos)
     {
         GetCapsule(pos, out Vector3 p1, out Vector3 p2);
-        Collider[] overlaps = Physics.OverlapCapsule(p1, p2, radius, groundMask,
+        Collider[] overlaps = Physics.OverlapCapsule(p1, p2, Radius, groundMask,
             QueryTriggerInteraction.Ignore);
         foreach (var other in overlaps)
         {
@@ -426,7 +443,7 @@ public class PlayerMotor : MonoBehaviour
     void GetCapsule(Vector3 pos, out Vector3 p1, out Vector3 p2)
     {
         Vector3 c = pos + Vector3.up * (height * 0.5f);
-        float h = Mathf.Max(0f, height * 0.5f - radius);
+        float h = Mathf.Max(0f, height * 0.5f - Radius);
         p1 = c + Vector3.up * h;
         p2 = c - Vector3.up * h;
     }
