@@ -3622,7 +3622,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpeedHud
   motor: {fileID: 0}
-  receiver: {fileID: 0}
   health: {fileID: 0}
   weapon: {fileID: 0}
   momentum: {fileID: 0}
@@ -3675,6 +3674,9 @@ MonoBehaviour:
   airAccel: 2
   useAirCap: 0
   airCapSpeed: 1.2
+  dashSpeed: 18
+  dashCooldown: 1.5
+  dashGrace: 0.35
   gravity: 22
   jumpForce: 8
   autoBhop: 1
@@ -3800,7 +3802,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GrappleHook
   aim: {fileID: 0}
-  requirePowerup: 0
   grappleMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -3986,7 +3987,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b397ff7792a3a8a4b98a8a5eabb94f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MomentumDamage
-  maxBonus: 0.25
+  maxBonus: 0.4
   rampStartSpeed: 9
   fullBonusSpeed: 16
 --- !u!1 &1584700224

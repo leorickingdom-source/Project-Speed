@@ -13,8 +13,11 @@ using UnityEngine;
 [RequireComponent(typeof(PlayerMotor))]
 public class MomentumDamage : MonoBehaviour
 {
-    [Tooltip("Damage bonus once you are at fullBonusSpeed or above. 0.25 = +25%.")]
-    public float maxBonus = 0.25f;
+    [Tooltip("Damage bonus once you are at fullBonusSpeed or above. 0.4 = +40%. Do NOT raise " +
+             "past 0.5 without rechecking breakpoints: at 1.5x a sniper body shot is exactly " +
+             "150, which turns it into a one-shot kill. 1.4x keeps sniper (140) and shotgun " +
+             "(112) as 2-shots while sustained weapons gain a lot.")]
+    public float maxBonus = 0.4f;
     [Tooltip("Speed the bonus starts ramping from. Matches PlayerMotor.groundSpeed by " +
              "default, so plain running earns nothing at all.")]
     public float rampStartSpeed = 9f;

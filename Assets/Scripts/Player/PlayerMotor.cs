@@ -53,6 +53,10 @@ public class PlayerMotor : MonoBehaviour
              "would hand a bhopping expert several times the dashes of a new player, stacking " +
              "a resource gap on top of an execution gap.")]
     public float dashCooldown = 1.5f;
+    [Tooltip("Seconds of friction immunity after a dash. Without it, ground friction bleeds an " +
+             "18 m/s dash back to groundSpeed in ~87ms (ln(2)/friction) and a ground dash is " +
+             "imperceptible — only air dashes survive, because air has no friction.")]
+    public float dashGrace = 0.35f;
 
     [Header("Jump / gravity")]
     public float gravity = 22f;
@@ -132,6 +136,7 @@ public class PlayerMotor : MonoBehaviour
     GrappleHook grapple;
     float slideBoostCooldown;   // counts down on dt so Step() stays replayable
     float dashCooldownLeft;     // ditto — dt, never Time.time
+    float dashGraceLeft;        // friction-immunity window after a dash
     bool hasDash;               // resolved once in Awake
 
     void Awake()
@@ -171,6 +176,9 @@ public class PlayerMotor : MonoBehaviour
     // networking lands.)
     public void Step(InputCmd cmd, float dt)
     {
+        // Ticked at the top so the grounded branch below reads it in the same tick it was set.
+        dashGraceLeft = Mathf.Max(0f, dashGraceLeft - dt);
+
         GroundCheck();
         UpdateStance(cmd, dt);
         UpdateFlow(dt);
@@ -190,7 +198,9 @@ public class PlayerMotor : MonoBehaviour
             else
             {
                 float cap = crouching ? crouchSpeed : GroundWishSpeed;
-                ApplyFriction(dt);
+                // Skip friction during the dash grace window, or the dash is gone in ~87ms.
+                // Accelerate can't slow you either (add <= 0 above cap), so the burst carries.
+                if (dashGraceLeft <= 0f) ApplyFriction(dt);
                 Accelerate(wish, cap, groundAccel, dt);
                 if (!TryJump(cmd) && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
             }
@@ -293,6 +303,7 @@ public class PlayerMotor : MonoBehaviour
         velocity.x = dir.x * speed;
         velocity.z = dir.z * speed;   // vertical untouched — a dash never fights gravity
         dashCooldownLeft = dashCooldown;
+        dashGraceLeft = dashGrace;
     }
 
     // One-time momentum kick on slide entry, clamped to slideMaxSpeed. Never slows you:
