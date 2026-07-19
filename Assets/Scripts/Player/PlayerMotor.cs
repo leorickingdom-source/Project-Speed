@@ -24,7 +24,7 @@ public class PlayerMotor : MonoBehaviour
 
     [Header("Ground move")]
     public float groundSpeed = 9f;
-    public float groundAccel = 14f;
+    public float groundAccel = 18f;
     public float friction = 8f;
     public float stopSpeed = 2f;
     public float slopeLimit = 55f;
@@ -49,18 +49,29 @@ public class PlayerMotor : MonoBehaviour
     public Transform head;                 // camera to lower (auto = child camera)
     public float standEyeHeight = 1.6f;    // camera local Y standing (captured in Awake)
     [Tooltip("Min horizontal speed to start a slide when you tap crouch.")]
-    public float slideEnterSpeed = 8f;
-    public float slideBoost = 1.15f;       // momentum kick on slide entry
-    public float slideFriction = 2f;       // low friction while sliding (vs friction)
+    public float slideEnterSpeed = 6f;
+    public float slideBoost = 1.35f;       // momentum kick on slide entry
+    [Tooltip("Ceiling the entry kick can lift you to. Downhill slope accel can still carry " +
+             "you past it — that speed is earned off the map, not off tapping crouch.")]
+    public float slideMaxSpeed = 16f;
+    [Tooltip("Seconds before the entry kick can fire again. Without it, tapping crouch re-enters " +
+             "the slide every few ticks and slideBoost compounds into unbounded speed.")]
+    public float slideCooldown = 0.4f;
+    public float slideFriction = 0.7f;     // low friction while sliding (vs friction)
     public float slideTurnRate = 4f;       // slide steer speed (rad/s), rotates velocity, never adds speed
     public float slideSlopeAccel = 18f;    // downhill acceleration while sliding
-    public float slideMinSpeed = 5f;       // slide ends below this speed (hysteresis vs enter)
+    public float slideMinSpeed = 3f;       // slide ends below this speed (hysteresis vs enter)
 
     [Header("Flow (accessible momentum)")]
-    [Tooltip("Keep moving and top speed climbs toward groundSpeed*flowMax; stop and it bleeds. " +
-             "This is the 'more movement = more speed' feel without needing Quake strafe skill.")]
+    [Tooltip("Keep moving and your AIR top speed climbs toward groundSpeed*flowMax; stop and it " +
+             "bleeds. This is the 'more movement = more speed' feel without needing Quake strafe skill.")]
     public bool useFlow = true;
-    public float flowMax = 2.5f;          // top speed = groundSpeed * this
+    [Tooltip("Let flow raise the GROUND cap too. Off (Quake-like): the ground is hard-capped at " +
+             "groundSpeed, so everything above it is speed you hold in the air and lose to friction " +
+             "the moment you stop hopping — that asymmetry is what makes bunnyhopping worth doing. " +
+             "On: you reach groundSpeed*flowMax just by running, and hopping stops mattering.")]
+    public bool flowRaisesGroundCap = false;
+    public float flowMax = 1.8f;          // air top speed = groundSpeed * this
     public float flowGainPerSec = 0.45f;  // how fast it builds while moving
     public float flowDecayPerSec = 1.5f;  // how fast it bleeds when slow on ground
     public float flowMoveThreshold = 4f;  // speed above which flow builds
@@ -75,6 +86,11 @@ public class PlayerMotor : MonoBehaviour
 
     public float Speed => new Vector2(velocity.x, velocity.z).magnitude;
 
+    // Target speeds fed to PM_Accelerate. Flow always raises the air ceiling; it only
+    // raises the ground ceiling if you opt in (see flowRaisesGroundCap).
+    float AirWishSpeed => groundSpeed * (useFlow ? flow : 1f);
+    float GroundWishSpeed => groundSpeed * (useFlow && flowRaisesGroundCap ? flow : 1f);
+
     // Freeze flag set by PlayerHealth on death/respawn. Skips the sim WITHOUT toggling
     // component.enabled — an auto-property is not serialized, so a death state can never
     // leak into a saved scene (which once shipped a build where the player couldn't move).
@@ -85,6 +101,7 @@ public class PlayerMotor : MonoBehaviour
 
     CapsuleCollider col;
     GrappleHook grapple;
+    float slideBoostCooldown;   // counts down on dt so Step() stays replayable
 
     void Awake()
     {
@@ -137,7 +154,7 @@ public class PlayerMotor : MonoBehaviour
             }
             else
             {
-                float cap = crouching ? crouchSpeed : groundSpeed * (useFlow ? flow : 1f);
+                float cap = crouching ? crouchSpeed : GroundWishSpeed;
                 ApplyFriction(dt);
                 Accelerate(wish, cap, groundAccel, dt);
                 if (!TryJump(cmd) && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
@@ -145,8 +162,7 @@ public class PlayerMotor : MonoBehaviour
         }
         else
         {
-            float maxSpeed = groundSpeed * (useFlow ? flow : 1f);
-            float ws = useAirCap ? Mathf.Min(maxSpeed, airCapSpeed) : maxSpeed;
+            float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
             Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * dt;
         }
@@ -174,10 +190,16 @@ public class PlayerMotor : MonoBehaviour
     void UpdateStance(InputCmd cmd, float dt)
     {
         bool crouchHeld = cmd.crouch;
+        slideBoostCooldown = Mathf.Max(0f, slideBoostCooldown - dt);
 
         // Hold OR tap to slide: you're sliding whenever crouching, grounded and
         // still fast. Speed hysteresis (enter at slideEnterSpeed, exit at the lower
-        // slideMinSpeed) stops flicker and re-boosting every tick.
+        // slideMinSpeed) stops flicker.
+        //
+        // ENTERING is always allowed — gating it would make crouch feel unresponsive —
+        // but the momentum kick is rate-limited by slideCooldown. Hysteresis alone only
+        // stopped re-boosting on consecutive TICKS; tapping crouch a few times a second
+        // still re-entered and re-multiplied slideBoost, compounding speed without bound.
         if (sliding)
         {
             if (!crouchHeld || !grounded || Speed < slideMinSpeed)
@@ -186,8 +208,7 @@ public class PlayerMotor : MonoBehaviour
         else if (crouchHeld && grounded && Speed >= slideEnterSpeed)
         {
             sliding = true;
-            velocity.x *= slideBoost; // one-time momentum kick on entry
-            velocity.z *= slideBoost;
+            if (slideBoostCooldown <= 0f) ApplySlideBoost();
         }
 
         bool wantLow = sliding || crouchHeld;
@@ -208,6 +229,21 @@ public class PlayerMotor : MonoBehaviour
             lp.y = standEyeHeight - (standHeight - height);
             head.localPosition = lp;
         }
+    }
+
+    // One-time momentum kick on slide entry, clamped to slideMaxSpeed. Never slows you:
+    // at or above the ceiling the kick simply doesn't apply, and no cooldown is spent.
+    // The early return also covers speed == 0, so the divide below is always safe.
+    void ApplySlideBoost()
+    {
+        float speed = Speed;
+        float target = Mathf.Min(speed * slideBoost, slideMaxSpeed);
+        if (target <= speed) return;
+
+        float scale = target / speed;
+        velocity.x *= scale;
+        velocity.z *= scale;
+        slideBoostCooldown = slideCooldown;
     }
 
     void UpdateCapsule()
