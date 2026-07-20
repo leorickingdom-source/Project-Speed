@@ -109,19 +109,47 @@ public class SpeedHud : MonoBehaviour
             GUI.Label(new Rect(sw - 228f, sh - bottomMargin - 54f, 200f, 20f), weapon.CurrentName, rightSmall);
         }
 
-        // Dash readiness — an ability the player is entitled to see.
-        if (motor.HasDash)
-        {
-            bool ready = motor.DashCooldownLeft <= 0f;
-            GUI.Label(new Rect(barX, barY - 22f, barWidth, 18f),
-                ready ? "DASH" : $"dash {motor.DashCooldownLeft:0.0}s",
-                ready ? small : dim);
-        }
+        DrawMobilityPerk(barX, barY);
 
         // Center crosshair dot.
         GUI.DrawTexture(new Rect(sw * 0.5f - 2f, sh * 0.5f - 2f, 4f, 4f), Texture2D.whiteTexture);
 
         if (showDebug) DrawDebug();
+    }
+
+    // Mobility perk state, centred directly above the gauge. Deliberately prominent: it is a
+    // charge you spend and wait on, so "can I do it right now" has to be answerable without
+    // looking away from the crosshair. Reads as a lit pill when ready, dim when spent.
+    void DrawMobilityPerk(float barX, float barY)
+    {
+        bool hasDash = motor.HasDash;
+        bool hasDJ = motor.HasDoubleJump;
+        if (!hasDash && !hasDJ) return;
+
+        bool ready;
+        string text;
+        if (hasDash)
+        {
+            ready = motor.DashCooldownLeft <= 0f;
+            text = ready ? "DASH  [Shift]" : $"DASH  {motor.DashCooldownLeft:0.0}s";
+        }
+        else
+        {
+            ready = motor.AirJumpsLeft > 0;
+            text = ready ? "DOUBLE JUMP  [Space]" : "DOUBLE JUMP  spent";
+        }
+
+        const float w = 200f, h = 26f;
+        float x = barX + (barWidth - w) * 0.5f, y = barY - h - 10f;
+
+        Color bg = ready ? new Color(1f, 0.78f, 0.28f, 0.22f) : new Color(0f, 0f, 0f, 0.35f);
+        Box(x, y, w, h, bg);
+        // Bright top edge while charged — readable in peripheral vision without reading text.
+        if (ready) Box(x, y, w, 2f, new Color(1f, 0.85f, 0.4f, 0.95f));
+
+        var centred = new GUIStyle(ready ? small : dim) { alignment = TextAnchor.MiddleCenter };
+        if (ready) centred.normal.textColor = new Color(1f, 0.9f, 0.55f);
+        GUI.Label(new Rect(x, y, w, h), text, centred);
     }
 
     // Engine internals. Dev-only — this is the data that used to be on screen permanently.

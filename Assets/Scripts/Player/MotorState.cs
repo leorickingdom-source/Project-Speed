@@ -27,6 +27,7 @@ public struct MotorState
     public float slideBoostCooldown;
     public float dashCooldownLeft;
     public float dashGraceLeft;
+    public int airJumpsUsed;      // DoubleJump budget spent this airtime
 
     // Grapple lives on GrappleHook but shapes velocity every tick through ApplyTo, so it has
     // to reconcile with the rest or a corrected client would replay with the rope in the

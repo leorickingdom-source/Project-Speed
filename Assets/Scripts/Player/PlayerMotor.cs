@@ -61,6 +61,11 @@ public class PlayerMotor : MonoBehaviour
     public float gravity = 22f;
     public float jumpForce = 8f;
     public bool autoBhop = true;
+    [Tooltip("Air jumps allowed by the DoubleJump passive, refunded on landing.")]
+    public int airJumpCount = 1;
+    [Tooltip("Upward speed of an air jump. Set flat rather than added to current velocity so " +
+             "it rescues a fall predictably instead of doing nothing when you're dropping fast.")]
+    public float airJumpForce = 7.5f;
 
     [Header("Crouch / slide")]
     public float standHeight = 2f;
@@ -114,9 +119,11 @@ public class PlayerMotor : MonoBehaviour
     // of toggling component.enabled.
     public float Radius { get; private set; }
 
-    // HUD readouts for the Dash passive.
+    // HUD readouts for the mobility passives.
     public bool HasDash => hasDash;
     public float DashCooldownLeft => dashCooldownLeft;
+    public bool HasDoubleJump => hasDoubleJump;
+    public int AirJumpsLeft => Mathf.Max(0, airJumpCount - airJumpsUsed);
 
     // Target speeds fed to PM_Accelerate. Flow always raises the air ceiling; it only
     // raises the ground ceiling if you opt in (see flowRaisesGroundCap).
@@ -143,7 +150,9 @@ public class PlayerMotor : MonoBehaviour
     float slideBoostCooldown;   // counts down on dt so Step() stays replayable
     float dashCooldownLeft;     // ditto — dt, never Time.time
     float dashGraceLeft;        // friction-immunity window after a dash
+    int airJumpsUsed;           // reconciled — see MotorState
     bool hasDash;               // resolved once in Awake
+    bool hasDoubleJump;
 
     void Awake()
     {
@@ -190,6 +199,7 @@ public class PlayerMotor : MonoBehaviour
             slideBoostCooldown = slideBoostCooldown,
             dashCooldownLeft = dashCooldownLeft,
             dashGraceLeft = dashGraceLeft,
+            airJumpsUsed = airJumpsUsed,
         };
         if (grapple != null)
             grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld);
@@ -209,6 +219,7 @@ public class PlayerMotor : MonoBehaviour
         slideBoostCooldown = s.slideBoostCooldown;
         dashCooldownLeft = s.dashCooldownLeft;
         dashGraceLeft = s.dashGraceLeft;
+        airJumpsUsed = s.airJumpsUsed;
         if (grapple != null)
             grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld);
         UpdateCapsule(); // collider must match the restored height before the next cast
@@ -236,6 +247,7 @@ public class PlayerMotor : MonoBehaviour
 
         if (grounded)
         {
+            airJumpsUsed = 0; // refunded by touching ground
             if (sliding)
             {
                 // Keep momentum: low friction, speed-preserving steer, downhill accel.
@@ -256,6 +268,7 @@ public class PlayerMotor : MonoBehaviour
         }
         else
         {
+            TryAirJump(cmd);
             float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
             Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * dt;
@@ -378,6 +391,7 @@ public class PlayerMotor : MonoBehaviour
         Radius = (passives != null && passives.Has(PassiveType.Featherweight))
             ? featherweightRadius : radius;
         hasDash = passives != null && passives.Has(PassiveType.Dash);
+        hasDoubleJump = passives != null && passives.Has(PassiveType.DoubleJump);
         col.radius = Radius;
         UpdateCapsule();
     }
@@ -495,7 +509,22 @@ public class PlayerMotor : MonoBehaviour
         if (!want) return false;
         velocity.y = jumpForce;
         grounded = false;
+        airJumpsUsed = 0; // leaving the ground under your own power refreshes air jumps
         return true;
+    }
+
+    // DoubleJump passive. Uses jumpPressed (the edge) and NOT jumpHeld, unlike the ground
+    // jump: with autoBhop on, a held jump button would spend the air jump the instant you
+    // left the ground. This way it only fires on a deliberate second press.
+    //
+    // Sets velocity.y flat rather than adding, so it reliably rescues a fall — adding to a
+    // large negative velocity would feel like the jump did nothing.
+    void TryAirJump(InputCmd cmd)
+    {
+        if (!hasDoubleJump || !cmd.jumpPressed) return;
+        if (airJumpsUsed >= airJumpCount) return;
+        velocity.y = airJumpForce;
+        airJumpsUsed++;
     }
 
     void GroundCheck()
