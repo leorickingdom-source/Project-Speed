@@ -283,7 +283,15 @@ public class PlayerMotor : MonoBehaviour
         TryDash(cmd, wish, dt, groundedAtTickStart);
 
         // Grapple shapes velocity after accel/gravity, before we move (motor = sole mover).
-        if (grapple != null) grapple.ApplyTo(ref velocity, transform.position, dt, cmd.grapple);
+        // The aim ray is rebuilt from the COMMAND, not the camera transform, so the server
+        // reproduces exactly the ray the client fired. Origin comes off `height`, which is
+        // already reconciled, so a crouched grapple lines up on both sides too.
+        if (grapple != null)
+        {
+            Vector3 eye = transform.position + Vector3.up * (standEyeHeight - (standHeight - height));
+            Vector3 aimDir = Quaternion.Euler(cmd.pitch, cmd.yaw, 0f) * Vector3.forward;
+            grapple.ApplyTo(ref velocity, eye, aimDir, dt, cmd.grapple);
+        }
 
         Vector3 pos = CollideAndSlide(transform.position, velocity * dt);
         Depenetrate(ref pos);

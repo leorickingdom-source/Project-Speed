@@ -87,12 +87,17 @@ public class GrappleHook : MonoBehaviour
     Vector3 RopeStart => aim != null ? aim.position - aim.up * 0.25f : PullPoint;
 
     // Called by PlayerMotor each fixed tick (after accel/gravity, before the move).
-    public void ApplyTo(ref Vector3 velocity, Vector3 pos, float dt, bool grappleHeld)
+    //
+    // aimOrigin/aimDir are passed in and derived from the INPUT COMMAND, never from the camera
+    // transform. That distinction is the whole reason this is reliable over a network: the
+    // server disables MouseLook on non-owned players, so their camera never rotates there. A
+    // transform-based raycast made the server aim somewhere else entirely, fail to hit, and
+    // then reconcile a "not attached" state back — the grapple tearing off at random.
+    public void ApplyTo(ref Vector3 velocity, Vector3 aimOrigin, Vector3 aimDir, float dt,
+        bool grappleHeld)
     {
-        if (aim == null) return;
-
         bool held = grappleHeld;
-        if (held && !wasHeld) TryAttach();
+        if (held && !wasHeld) TryAttach(aimOrigin, aimDir);
         else if (!held && wasHeld) Attached = false; // release -> momentum preserved
         wasHeld = held;
 
@@ -109,9 +114,10 @@ public class GrappleHook : MonoBehaviour
         velocity = Vector3.MoveTowards(velocity, dir * maxPullSpeed, pullAccel * dt);
     }
 
-    void TryAttach()
+    void TryAttach(Vector3 origin, Vector3 dir)
     {
-        if (Physics.Raycast(aim.position, aim.forward, out RaycastHit hit, maxRange,
+        if (dir.sqrMagnitude < 1e-6f) return;
+        if (Physics.Raycast(origin, dir, out RaycastHit hit, maxRange,
                 grappleMask, QueryTriggerInteraction.Ignore))
         {
             Attached = true;
