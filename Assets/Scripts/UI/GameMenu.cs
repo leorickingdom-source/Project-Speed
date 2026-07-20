@@ -113,6 +113,13 @@ public class GameMenu : MonoBehaviour
             GUI.Box(new Rect(x, y, w, h), "PAUSED", panel);
             ControlsCard(new Rect(x + 16f, y + 46f, w - 32f, Controls.Length * 24f + 6f), null);
             DrawSettings(x + 16f, y + 56f + Controls.Length * 24f, w - 32f);
+            if (GUI.Button(new Rect(x + 16f, y + h - 84f, w - 32f, 30f), "Leave match  —  back to menu"))
+            {
+                GameSettings.Save();
+                paused = false;
+                ConnectUI.LeaveMatch();
+                return;
+            }
             if (GUI.Button(new Rect(x + 16f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Resume  (Esc)")) SetPaused(false);
             if (GUI.Button(new Rect(x + w * 0.5f + 4f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Quit  (Q)")) Quit();
         }

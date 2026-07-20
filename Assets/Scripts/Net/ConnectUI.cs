@@ -41,7 +41,7 @@ public class ConnectUI : MonoBehaviour
         // Once running, offer only a way out — the address is locked in by then.
         if (Started)
         {
-            if (GUI.Button(new Rect(12, 12, 120, 30), "Disconnect", button)) StopAll(nm);
+            if (GUI.Button(new Rect(12, 12, 140, 30), "Leave match", button)) LeaveMatch();
             return;
         }
 
@@ -113,12 +113,11 @@ public class ConnectUI : MonoBehaviour
         if (GUI.Button(new Rect(12, 72, 100, 32), "Host", button))
         {
             ApplyTransport(nm);
+            // StartConnection is ASYNC: IsServerStarted is still false on the next line, and
+            // LoadGlobalScenes silently refuses when the server is not up. So wait for the
+            // started callback, then load the map, then connect our own client.
+            nm.ServerManager.OnServerConnectionState += OnServerState;
             nm.ServerManager.StartConnection();
-            // Register the map BEFORE any client joins — including our own — so it arrives as
-            // part of the normal connection flow rather than yanking scenes out from under a
-            // client mid-handshake.
-            LoadChosenMap(nm);
-            nm.ClientManager.StartConnection();
         }
 
         if (GUI.Button(new Rect(120, 72, 100, 32), "Client", button))
@@ -133,6 +132,19 @@ public class ConnectUI : MonoBehaviour
             ApplyTransport(nm);
             nm.ServerManager.StartConnection();
         }
+    }
+
+    // Fires once the server socket is genuinely up. Only now can the map be registered.
+    void OnServerState(FishNet.Transporting.ServerConnectionStateArgs args)
+    {
+        if (args.ConnectionState != FishNet.Transporting.LocalConnectionState.Started) return;
+
+        var nm = InstanceFinder.NetworkManager;
+        if (nm == null) return;
+        nm.ServerManager.OnServerConnectionState -= OnServerState;
+
+        LoadChosenMap(nm);
+        nm.ClientManager.StartConnection();
     }
 
     // Load the host's map as a global scene so joining clients receive it automatically.
@@ -156,6 +168,20 @@ public class ConnectUI : MonoBehaviour
         if (t == null) return;
         t.SetClientAddress(address);
         t.SetPort(port);
+    }
+
+    // Leave the match and get back to a clean connect screen without restarting the app.
+    // Reloads the default scene because a match may have swapped the map out from under us,
+    // and because reloading is the simplest way to be certain no spawned players, scores or
+    // pickup state survive into the next session.
+    public static void LeaveMatch()
+    {
+        var nm = InstanceFinder.NetworkManager;
+        if (nm != null) StopAll(nm);
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        UnityEngine.SceneManagement.SceneManager.LoadScene(MapChoice.Names[0]);
     }
 
     static void StopAll(FishNet.Managing.NetworkManager nm)
