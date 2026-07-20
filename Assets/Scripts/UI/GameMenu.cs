@@ -53,6 +53,12 @@ public class GameMenu : MonoBehaviour
     {
         EnsureStyles();
 
+        // Nothing until you are actually in a match. The connect screen owns the display
+        // before that, and this HUD used to draw straight through it — the hint line sits at
+        // Screen.height - 26, which lands on top of the loadout descriptions in a short window.
+        if (!FishNet.InstanceFinder.IsClientStarted && !FishNet.InstanceFinder.IsServerStarted)
+            return;
+
         if (showControls && !paused)
             ControlsCard(new Rect(Screen.width - 344f, 12f, 332f, 30f + Controls.Length * 24f), "CONTROLS   (Tab)");
 
