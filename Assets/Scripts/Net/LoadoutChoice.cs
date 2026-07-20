@@ -13,6 +13,21 @@ public static class LoadoutChoice
 
     public static readonly string[] Names = { "Pistol", "Rifle", "Sniper", "SMG", "Shotgun" };
 
+    // Range identity, so the pick is informed. Damage numbers are close across the set —
+    // what actually separates them is WHERE that damage lands.
+    public static string Describe(int i)
+    {
+        switch (i)
+        {
+            case 0: return "Pistol - no falloff at all. Never great, never punished. The consistency pick.";
+            case 1: return "Rifle - all-rounder. Full damage to 45m, tapers to 70% at 90m.";
+            case 2: return "Sniper - only 40% damage under 10m, full past 25m. Deadly at range, helpless if rushed.";
+            case 3: return "SMG - close-mid pressure. Full to 20m, down to 40% by 45m.";
+            case 4: return "Shotgun - brutal inside 8m, nearly harmless by 20m. You must close.";
+            default: return "";
+        }
+    }
+
     public static string CurrentName =>
         (WeaponIndex >= 0 && WeaponIndex < Names.Length) ? Names[WeaponIndex] : "?";
 }

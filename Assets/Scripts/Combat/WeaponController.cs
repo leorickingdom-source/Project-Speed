@@ -28,6 +28,26 @@ public class Weapon
     public float range = 200f;
     public Color tracer = Color.white;
 
+    [Header("Damage falloff")]
+    // Two points on a damage-vs-distance line, so the SAME fields express both shapes:
+    // normal falloff (near=1.0 -> far=0.2, e.g. shotgun) AND inverted (near=0.4 -> far=1.0,
+    // e.g. sniper punished up close). Outside the two points the value is clamped.
+    // farDistance <= nearDistance disables falloff entirely — a flat, consistent weapon.
+    [Tooltip("Distance where nearMultiplier applies. Closer than this is clamped to it.")]
+    public float nearDistance = 0f;
+    [Range(0f, 2f)] public float nearMultiplier = 1f;
+    [Tooltip("Distance where farMultiplier applies. Set <= nearDistance to disable falloff.")]
+    public float farDistance = 0f;
+    [Range(0f, 2f)] public float farMultiplier = 1f;
+
+    // Damage scale for a hit at this distance.
+    public float DamageAtRange(float distance)
+    {
+        if (farDistance <= nearDistance) return 1f; // falloff disabled
+        float t = Mathf.Clamp01((distance - nearDistance) / (farDistance - nearDistance));
+        return Mathf.Lerp(nearMultiplier, farMultiplier, t);
+    }
+
     [Header("Projectile (rocket / arrow)")]
     public float projectileSpeed = 40f;
     [Tooltip("Arrow only. Downward accel on the shot. 0 = flat. Realistic drop plus a target " +
@@ -130,11 +150,19 @@ public class WeaponController : MonoBehaviour
 
     static Weapon[] DefaultLoadout() => new[]
     {
+        // Falloff is what gives these weapons distinct ROLES. Raw DPS stays bunched (64-86)
+        // on purpose: with a locked loadout, a strictly-stronger weapon would just be the one
+        // correct pick. Differentiating by WHERE the damage applies keeps every choice live.
+
+        // Pistol: the consistency pick. No falloff at all — never great, never punished.
+        // Its identity is being the only weapon that does not care about distance.
         new Weapon { name = "Pistol", kind = FireKind.Hitscan, automatic = true,  cycle = 0.28f,
                      damage = 22f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(0.90f, 0.90f, 0.70f),
                      magSize = 15, reloadTime = 1.0f },
+        // Rifle: honest all-rounder, mild taper so it never dominates the sniper lane.
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
                      damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
+                     nearDistance = 45f, nearMultiplier = 1f, farDistance = 90f, farMultiplier = 0.7f,
                      magSize = 30, reloadTime = 1.6f },
         // Rocket SHELVED (not deleted) — rocket-jumping is a Quake signature and this game
         // is deliberately diverging from it. Everything it needs still works: FireKind
@@ -143,14 +171,21 @@ public class WeaponController : MonoBehaviour
         // new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true,  cycle = 0.9f,
         //              projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
         //              magSize = 4, reloadTime = 2.2f },
+        // Sniper: INVERTED falloff — 40% under 10m, full past 25m. Being rushed is now the
+        // sniper's actual weakness rather than a thing players had to agree to pretend.
         new Weapon { name = "Sniper", kind = FireKind.Hitscan, automatic = true,  cycle = 1.2f,
                      damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f),
+                     nearDistance = 10f, nearMultiplier = 0.4f, farDistance = 25f, farMultiplier = 1f,
                      magSize = 5, reloadTime = 1.8f },
+        // SMG: close-mid pressure, gutted at range so it cannot contest the lane.
         new Weapon { name = "SMG",    kind = FireKind.Hitscan, automatic = true,  cycle = 0.07f,
                      damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
+                     nearDistance = 20f, nearMultiplier = 1f, farDistance = 45f, farMultiplier = 0.4f,
                      magSize = 30, reloadTime = 1.4f },
+        // Shotgun: brutal inside 8m, nearly harmless by 20m. Must close to matter.
         new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
                      damage = 10f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
+                     nearDistance = 8f, nearMultiplier = 1f, farDistance = 20f, farMultiplier = 0.2f,
                      magSize = 6, reloadTime = 1.8f },
         // Bow / Knives / Crossbow SHELVED (not deleted). All-projectile play was the problem:
         // direct-hit only (no splash), so a miss is worth nothing, against the fastest
@@ -282,7 +317,10 @@ public class WeaponController : MonoBehaviour
                 {
                     // Headshot: hit lands in the top slice of the target's collider.
                     bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
-                    ApplyDamage(hit.collider, hp, (head ? w.damage * headMultiplier : w.damage) * scale);
+                    // Falloff is per-pellet: each shotgun pellet has its own travel distance.
+                    float dmg = (head ? w.damage * headMultiplier : w.damage)
+                                * scale * w.DamageAtRange(hit.distance);
+                    ApplyDamage(hit.collider, hp, dmg);
                 }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
