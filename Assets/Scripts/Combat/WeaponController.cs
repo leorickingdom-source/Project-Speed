@@ -57,8 +57,14 @@ public class WeaponController : MonoBehaviour
     [Header("Masks")]
     public LayerMask hitMask = ~0;      // player layer removed at runtime
 
-    [Header("Loadout (keys 1-5)")]
+    [Header("Loadout")]
     public Weapon[] weapons;            // auto-filled with the default 5 if left empty
+    [Tooltip("Index into weapons[] that everyone spawns holding. 0 Pistol, 1 Rifle, 2 Sniper, " +
+             "3 SMG, 4 Shotgun.")]
+    public int startingWeapon = 1;
+    [Tooltip("Off = deathmatch with a single weapon: the number keys do nothing and you keep " +
+             "what you spawned with. Turn on to restore 1-5 switching once map pickups exist.")]
+    public bool allowWeaponSwitching = false;
 
     [Header("Headshots (hitscan)")]
     public float headMultiplier = 2f;
@@ -109,6 +115,7 @@ public class WeaponController : MonoBehaviour
         feedback = GetComponent<HitFeedback>();
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
+        Current = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
         BuildPool(16);
     }
 
@@ -183,16 +190,20 @@ public class WeaponController : MonoBehaviour
         var m = Mouse.current;
         if (kb != null && weapons != null)
         {
-            int prev = Current;
-            if (kb.digit1Key.wasPressedThisFrame) Current = 0;
-            if (kb.digit2Key.wasPressedThisFrame) Current = 1;
-            if (kb.digit3Key.wasPressedThisFrame) Current = 2;
-            if (kb.digit4Key.wasPressedThisFrame) Current = 3;
-            if (kb.digit5Key.wasPressedThisFrame) Current = 4;
-            // digit6-8 unbound while Bow / Knives / Crossbow are shelved. The Clamp below
-            // would only fold them onto the last weapon, which reads as a stuck key.
-            Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
-            if (Current != prev) reloadDoneAt = 0f;       // switching cancels a reload
+            // Deathmatch default: one weapon, no switching. The number keys are ignored
+            // entirely rather than clamped, so a stray press cannot silently swap your gun.
+            if (allowWeaponSwitching)
+            {
+                int prev = Current;
+                if (kb.digit1Key.wasPressedThisFrame) Current = 0;
+                if (kb.digit2Key.wasPressedThisFrame) Current = 1;
+                if (kb.digit3Key.wasPressedThisFrame) Current = 2;
+                if (kb.digit4Key.wasPressedThisFrame) Current = 3;
+                if (kb.digit5Key.wasPressedThisFrame) Current = 4;
+                // digit6-8 unbound while Bow / Knives / Crossbow are shelved.
+                Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
+                if (Current != prev) reloadDoneAt = 0f;   // switching cancels a reload
+            }
             if (kb.rKey.wasPressedThisFrame) StartReload();
         }
 

@@ -138,6 +138,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     void Die()
     {
         reviveAt = Time.time + respawnDelay;
+        // Counted here, not in the shooter's path, so deaths with no killer — pit falls and
+        // out-of-bounds — are recorded too. Runs under authority; Die() is authority-only.
+        var score = GetComponent<PlayerScore>();
+        if (score != null) score.AddDeath();
         ApplyDeadState();
     }
 

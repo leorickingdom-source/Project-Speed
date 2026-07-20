@@ -12,7 +12,7 @@ public class GameMenu : MonoBehaviour
         "Space  —  jump (hold to bunny-hop)",
         "Ctrl / C  —  crouch · slide · crouch-jump",
         "Mouse  —  look     LMB  —  fire     R  —  reload",
-        "1-5  —  Pistol Rifle Sniper SMG Shotgun",
+        "Deathmatch  —  one weapon, most kills wins",
         "RMB  —  grapple (reels you in)",
         "Shift  —  dash (Dash passive only)",
         "Aim for the head  —  2x damage",

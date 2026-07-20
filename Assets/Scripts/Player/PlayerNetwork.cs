@@ -171,7 +171,14 @@ public class PlayerNetwork : TickNetworkBehaviour
 
         // Only the server knows whether that killed them — health is server-owned — so the
         // kill cue has to come back to the shooter rather than being guessed locally.
-        if (wasAlive && !hp.Alive) ConfirmKill(Owner);
+        if (wasAlive && !hp.Alive)
+        {
+            ConfirmKill(Owner);
+            // Credit the kill here rather than in PlayerHealth: only this path knows WHO did
+            // it. Deaths are counted in PlayerHealth so pit falls and out-of-bounds count too.
+            var mine = GetComponent<PlayerScore>();
+            if (mine != null) mine.AddKill();
+        }
     }
 
     [FishNet.Object.TargetRpc]
