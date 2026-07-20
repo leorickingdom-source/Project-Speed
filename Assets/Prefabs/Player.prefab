@@ -29,6 +29,7 @@ GameObject:
   - component: {fileID: 5913326256280703322}
   - component: {fileID: 558183095219181554}
   - component: {fileID: 5162052341215088859}
+  - component: {fileID: 9007662051478308311}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -139,6 +140,8 @@ MonoBehaviour:
   gravity: 22
   jumpForce: 8
   autoBhop: 1
+  airJumpCount: 1
+  airJumpForce: 7.5
   standHeight: 2
   crouchHeight: 1
   crouchSpeed: 4
@@ -198,6 +201,11 @@ MonoBehaviour:
   motor: {fileID: 0}
   health: {fileID: 0}
   weapon: {fileID: 0}
+  maxDisplaySpeed: 20
+  barWidth: 260
+  barHeight: 10
+  bottomMargin: 28
+  showDebug: 0
 --- !u!114 &4639964485488779150
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -407,6 +415,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 901c699b29512fd42961daaf1dd42e16, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PassiveLoadout
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 1423617289288079096}
+  _networkObjectCache: {fileID: 0}
   passive: 2
 --- !u!114 &3005084162460478396
 MonoBehaviour:
@@ -581,6 +592,22 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 0}
   showScoreboard: 1
   fontSize: 16
+--- !u!114 &9007662051478308311
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919031712746202489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a9f73cb43649034284830d2fe1bac72, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAudio
+  volume: 0.5
+  maxDistance: 60
+  stepDistance: 2.6
+  minStepSpeed: 2
 --- !u!1 &2614098738509366517
 GameObject:
   m_ObjectHideFlags: 0

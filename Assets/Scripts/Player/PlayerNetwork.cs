@@ -203,6 +203,24 @@ public class PlayerNetwork : TickNetworkBehaviour
         }
     }
 
+    // Gunfire is the one sound that cannot be derived locally: WeaponController is disabled on
+    // non-owners, so nothing about a remote player's state reveals that they shot. Footsteps,
+    // jumps and landings all come free from replicated movement, so only this needs a message.
+    [FishNet.Object.ServerRpc]
+    public void ReportFire(int weaponIndex)
+    {
+        BroadcastFire(weaponIndex);
+    }
+
+    // ExcludeOwner: the shooter already played it locally the instant they fired, with no
+    // round-trip. Replaying it here would double it up a few hundred ms late.
+    [FishNet.Object.ObserversRpc(ExcludeOwner = true)]
+    void BroadcastFire(int weaponIndex)
+    {
+        var a = GetComponent<PlayerAudio>();
+        if (a != null) a.PlayFire(weaponIndex);
+    }
+
     [FishNet.Object.TargetRpc]
     void ConfirmKill(FishNet.Connection.NetworkConnection conn)
     {

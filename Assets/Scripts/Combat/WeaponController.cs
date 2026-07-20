@@ -115,6 +115,7 @@ public class WeaponController : MonoBehaviour
     CamperDamage camper;
     PlayerNetwork net;                       // null offline
     HitFeedback feedback;                    // owner-only shot confirmation
+    PlayerAudio audioFx;
     readonly RaycastHit[] rayHits = new RaycastHit[16];
 
     // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
@@ -142,6 +143,7 @@ public class WeaponController : MonoBehaviour
         // Self-hits are excluded per-hit by transform root instead (see NearestHitIgnoringSelf).
         net = GetComponent<PlayerNetwork>();
         feedback = GetComponent<HitFeedback>();
+        audioFx = GetComponent<PlayerAudio>();
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
         Current = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
@@ -290,6 +292,11 @@ public class WeaponController : MonoBehaviour
     void Fire(Weapon w)
     {
         if (aim == null) return;
+
+        // Local first, so your own shot is instant. Then tell everyone else.
+        if (audioFx != null) audioFx.PlayFire(Current);
+        if (net != null && net.IsSpawned) net.ReportFire(Current);
+
         if (w.kind == FireKind.Projectile) FireProjectile(w);
         else if (w.kind == FireKind.Arrow) FireArrow(w);
         else FireHitscan(w);
