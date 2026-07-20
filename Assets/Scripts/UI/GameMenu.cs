@@ -14,7 +14,7 @@ public class GameMenu : MonoBehaviour
         "Mouse  —  look     LMB  —  fire     R  —  reload",
         "Deathmatch  —  one weapon, most kills wins",
         "RMB  —  grapple (reels you in)",
-        "Shift  —  dash (Dash passive only)",
+        "Shift, or Space in mid-air  —  dash (Dash passive)",
         "Aim for the head  —  2x damage",
     };
 

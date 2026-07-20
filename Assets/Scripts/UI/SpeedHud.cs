@@ -131,7 +131,7 @@ public class SpeedHud : MonoBehaviour
         if (hasDash)
         {
             ready = motor.DashCooldownLeft <= 0f;
-            text = ready ? "DASH  [Shift]" : $"DASH  {motor.DashCooldownLeft:0.0}s";
+            text = ready ? "DASH  [Shift / Space in air]" : $"DASH  {motor.DashCooldownLeft:0.0}s";
         }
         else
         {

@@ -240,6 +240,10 @@ public class PlayerMotor : MonoBehaviour
         dashGraceLeft = Mathf.Max(0f, dashGraceLeft - dt);
 
         GroundCheck();
+        // Captured BEFORE any jump, because TryJump clears `grounded`. The air-dash binding
+        // below needs to know where you were when the tick started, or a normal ground jump
+        // would immediately read as an air dash.
+        bool groundedAtTickStart = grounded;
         UpdateStance(cmd, dt);
         UpdateFlow(dt);
 
@@ -276,7 +280,7 @@ public class PlayerMotor : MonoBehaviour
 
         // Dash lands AFTER accel/gravity so it reads as instant and full-strength; friction
         // and accel resume next tick. Grapple still gets the last word below.
-        TryDash(cmd, wish, dt);
+        TryDash(cmd, wish, dt, groundedAtTickStart);
 
         // Grapple shapes velocity after accel/gravity, before we move (motor = sole mover).
         if (grapple != null) grapple.ApplyTo(ref velocity, transform.position, dt, cmd.grapple);
@@ -350,10 +354,16 @@ public class PlayerMotor : MonoBehaviour
     // compound with movement skill into runaway speed — above dashSpeed it becomes a free
     // instant REDIRECT instead, which is a different tool rather than a bigger one. Same
     // shape as PadBoost's Mathf.Max on Y.
-    void TryDash(InputCmd cmd, Vector3 wish, float dt)
+    void TryDash(InputCmd cmd, Vector3 wish, float dt, bool groundedAtTickStart)
     {
         dashCooldownLeft = Mathf.Max(0f, dashCooldownLeft - dt);
-        if (!hasDash || !cmd.dashPressed || dashCooldownLeft > 0f) return;
+        if (!hasDash || dashCooldownLeft > 0f) return;
+
+        // Shift dashes anywhere. Space ALSO dashes, but only in the air — on the ground it
+        // has to stay jump. Dash and DoubleJump are mutually exclusive picks, so Space never
+        // has to choose between them: it means "use my mobility perk" either way.
+        bool wants = cmd.dashPressed || (!groundedAtTickStart && cmd.jumpPressed);
+        if (!wants) return;
 
         // No movement input = dash where you look, so the button never silently does nothing.
         Vector3 dir = wish.sqrMagnitude > 1e-4f ? wish : Quaternion.Euler(0f, cmd.yaw, 0f) * Vector3.forward;

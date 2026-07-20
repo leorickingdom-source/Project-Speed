@@ -27,7 +27,7 @@ public static class PassiveChoice
             case PassiveType.Vitality: return "+40 max HP (190). Survive a sniper body shot with room to spare.";
             case PassiveType.Momentum: return "Damage rises with speed, up to +40% at 16 m/s. Holds ~1s after you slow.";
             case PassiveType.Featherweight: return "20% narrower hitbox. Harder to hit; changes no damage numbers.";
-            case PassiveType.Dash: return "Shift to burst-move. Brings you up to 18 m/s, 1.5s cooldown.";
+            case PassiveType.Dash: return "Shift, or Space in mid-air. Burst to 18 m/s, 1.5s cooldown.";
             case PassiveType.DoubleJump: return "One extra jump in mid-air, refunded when you land. Reach and recovery.";
             case PassiveType.Highground: return "Damage rises with altitude, up to +40% at 10m. Decks and pad apexes.";
             case PassiveType.Camper: return "2x damage while nearly still, gone above 5 m/s. Yes, really.";
