@@ -28,40 +28,22 @@ public class GameMenu : MonoBehaviour
     public static bool IsPaused { get; private set; }
     GUIStyle panel, header, row, hint;
 
-    void Awake() => GameSettings.Load();
-
-    // Slider + live value. Applies on every change so the effect is felt while dragging —
-    // sensitivity in particular is impossible to judge without moving the mouse as you set it.
-    float SettingRow(float x, float y, float w, string name, float value, float min, float max,
-        string fmt)
+    void Awake()
     {
-        GUI.Label(new Rect(x, y, w * 0.55f, 20f), name, row);
-        GUI.Label(new Rect(x + w * 0.55f, y, w * 0.45f, 20f), value.ToString(fmt), row);
-        return GUI.HorizontalSlider(new Rect(x, y + 20f, w, 16f), value, min, max);
+        GameSettings.Load();
+        IsPaused = false; // static, so a stale true would survive a scene load
     }
 
-    void DrawSettings(float x, float y, float w)
+    // Clears pause from outside — used when leaving a match, since the static would otherwise
+    // persist and keep the menu drawn over the connect screen.
+    public static void ForceUnpause()
     {
-        GUI.Label(new Rect(x, y, w, 22f), "SETTINGS", header);
-        y += 24f;
-
-        float s = SettingRow(x, y, w, "Mouse sensitivity", GameSettings.Sensitivity,
-            GameSettings.SensRange.x, GameSettings.SensRange.y, "0.000");
-        y += 42f;
-        float v = SettingRow(x, y, w, "Volume", GameSettings.Volume, 0f, 1f, "0.00");
-        y += 42f;
-        float f = SettingRow(x, y, w, "Field of view", GameSettings.Fov,
-            GameSettings.FovRange.x, GameSettings.FovRange.y, "0");
-
-        if (!Mathf.Approximately(s, GameSettings.Sensitivity)
-            || !Mathf.Approximately(v, GameSettings.Volume)
-            || !Mathf.Approximately(f, GameSettings.Fov))
-        {
-            GameSettings.Sensitivity = s;
-            GameSettings.Volume = v;
-            GameSettings.Fov = f;
-            GameSettings.Apply();
-        }
+        IsPaused = false;
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        foreach (var gm in FindObjectsByType<GameMenu>(FindObjectsSortMode.None))
+            if (gm != null) gm.paused = false;
     }
 
     void Update()
@@ -122,7 +104,7 @@ public class GameMenu : MonoBehaviour
             float w = 400f, h = 470f, x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
             GUI.Box(new Rect(x, y, w, h), "PAUSED", panel);
             ControlsCard(new Rect(x + 16f, y + 46f, w - 32f, Controls.Length * 24f + 6f), null);
-            DrawSettings(x + 16f, y + 56f + Controls.Length * 24f, w - 32f);
+            SettingsUI.Draw(x + 16f, y + 56f + Controls.Length * 24f, w - 32f);
             if (GUI.Button(new Rect(x + 16f, y + h - 84f, w - 32f, 30f), "Leave match  —  back to menu"))
             {
                 GameSettings.Save();

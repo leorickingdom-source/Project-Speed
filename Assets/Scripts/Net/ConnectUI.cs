@@ -23,6 +23,8 @@ public class ConnectUI : MonoBehaviour
     bool Started => InstanceFinder.NetworkManager != null &&
                     (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted);
 
+    void Awake() => GameSettings.Load();
+
     void OnGUI()
     {
         var nm = InstanceFinder.NetworkManager;
@@ -50,7 +52,7 @@ public class ConnectUI : MonoBehaviour
 
         // Opaque backing panel. Without it anything else drawing this frame bleeds through
         // and the text becomes unreadable rather than merely untidy.
-        const float panelW = 560f, panelH = 336f;
+        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f;
         if (panel == null)
         {
             panel = new Texture2D(1, 1);
@@ -95,6 +97,11 @@ public class ConnectUI : MonoBehaviour
         // Description of the current pick, so the choice can be made without reading code.
         GUI.Label(new Rect(12, 300, panelW - 24f, 24),
             PassiveChoice.Describe(PassiveChoice.Selected), label);
+
+        // Settings here too, not only in the pause menu — otherwise a first-time player spends
+        // their entire first match on someone else's sensitivity before they can find it.
+        // Saved immediately on change, since there is no menu-close event to hook here.
+        if (SettingsUI.Draw(12, 332, panelW - 24f)) GameSettings.Save();
 
         // Map. Host-only in effect: the server loads it as a global scene and clients receive
         // it when they join, so a client's selection here is ignored.
@@ -173,18 +180,20 @@ public class ConnectUI : MonoBehaviour
         t.SetPort(port);
     }
 
-    // Leave the match and get back to a clean connect screen without restarting the app.
-    // Reloads the default scene because a match may have swapped the map out from under us,
-    // and because reloading is the simplest way to be certain no spawned players, scores or
-    // pickup state survive into the next session.
+    // Leave the match and return to the connect screen without restarting the app.
+    //
+    // Deliberately does NOT reload the scene. FishNet already despawns networked objects when
+    // the connection stops, so a reload adds nothing — and reloading a scene that contains a
+    // NetworkManager while the live one is DontDestroyOnLoad risks ending up with two. You
+    // stay in whatever map you last played; hosting again loads whichever map is selected.
     public static void LeaveMatch()
     {
         var nm = InstanceFinder.NetworkManager;
         if (nm != null) StopAll(nm);
-        Time.timeScale = 1f;
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-        UnityEngine.SceneManagement.SceneManager.LoadScene(MapChoice.Names[0]);
+
+        // Pause state is static, so it survives everything and has to be cleared explicitly.
+        // Leaving it set was why the pause panel stayed on screen over the connect screen.
+        GameMenu.ForceUnpause();
     }
 
     static void StopAll(FishNet.Managing.NetworkManager nm)
