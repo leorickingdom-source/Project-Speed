@@ -79,6 +79,7 @@ public class WeaponController : MonoBehaviour
     HighgroundDamage highground;
     CamperDamage camper;
     PlayerNetwork net;                       // null offline
+    HitFeedback feedback;                    // owner-only shot confirmation
     readonly RaycastHit[] rayHits = new RaycastHit[16];
 
     // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
@@ -105,6 +106,7 @@ public class WeaponController : MonoBehaviour
         // which meant every player was invisible to hitscan and nobody could damage anyone.
         // Self-hits are excluded per-hit by transform root instead (see NearestHitIgnoringSelf).
         net = GetComponent<PlayerNetwork>();
+        feedback = GetComponent<HitFeedback>();
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
         BuildPool(16);
@@ -316,6 +318,11 @@ public class WeaponController : MonoBehaviour
     // screen. Anything without a NetworkObject (dummies, offline play) is applied locally.
     void ApplyDamage(Collider victim, IDamageable hp, float damage)
     {
+        // Confirm to the shooter immediately, before any network round-trip. This is the one
+        // cue that has to feel instant, and it matches the trust model anyway — the client
+        // already decides its own hits (see PlayerNetwork.ReportHit).
+        if (feedback != null) feedback.ShowHit();
+
         var nob = victim.GetComponentInParent<FishNet.Object.NetworkObject>();
         if (net != null && net.IsSpawned && nob != null) net.ReportHit(nob, damage);
         else hp.Damage(damage);

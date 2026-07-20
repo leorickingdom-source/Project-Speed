@@ -107,6 +107,7 @@ public class PlayerNetwork : TickNetworkBehaviour
         DisableIfPresent(GetComponent<SpeedHud>());
         DisableIfPresent(GetComponent<PassivePicker>());
         DisableIfPresent(GetComponent<SpeedFeel>());
+        DisableIfPresent(GetComponent<HitFeedback>()); // your markers, not theirs
 
         // Remote players keep their body but must not render or listen.
         var cam = GetComponentInChildren<Camera>();
@@ -163,7 +164,21 @@ public class PlayerNetwork : TickNetworkBehaviour
     {
         if (victim == null || damage <= 0f) return;
         var hp = victim.GetComponent<PlayerHealth>();
-        if (hp != null) hp.Damage(damage);
+        if (hp == null) return;
+
+        bool wasAlive = hp.Alive;
+        hp.Damage(damage);
+
+        // Only the server knows whether that killed them — health is server-owned — so the
+        // kill cue has to come back to the shooter rather than being guessed locally.
+        if (wasAlive && !hp.Alive) ConfirmKill(Owner);
+    }
+
+    [FishNet.Object.TargetRpc]
+    void ConfirmKill(FishNet.Connection.NetworkConnection conn)
+    {
+        var fb = GetComponent<HitFeedback>();
+        if (fb != null) fb.ShowKill();
     }
 
     [Reconcile]
