@@ -99,7 +99,14 @@ public class PlayerNetwork : TickNetworkBehaviour
             if (rend != null) rend.enabled = !IsOwner;
         }
 
-        if (IsOwner) return;
+        if (IsOwner)
+        {
+            // Apply the weapon picked on the connect screen. Owner-only: it's a local choice,
+            // and remote players never render your tracers anyway.
+            var wc = GetComponent<WeaponController>();
+            if (wc != null) wc.SetLockedWeapon(LoadoutChoice.WeaponIndex);
+            return;
+        }
 
         DisableIfPresent(GetComponent<InputReader>());
         DisableIfPresent(GetComponent<MouseLook>());
@@ -178,6 +185,9 @@ public class PlayerNetwork : TickNetworkBehaviour
             // it. Deaths are counted in PlayerHealth so pit falls and out-of-bounds count too.
             var mine = GetComponent<PlayerScore>();
             if (mine != null) mine.AddKill();
+
+            var match = FindAnyObjectByType<MatchManager>();
+            if (match != null) match.CheckForWinner();
         }
     }
 

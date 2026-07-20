@@ -18,7 +18,7 @@ public class ConnectUI : MonoBehaviour
     public string address = "localhost";
     public ushort port = 7770;
 
-    GUIStyle label, field, button;
+    GUIStyle label, field, button, selected;
     bool Started => InstanceFinder.NetworkManager != null &&
                     (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted);
 
@@ -33,6 +33,8 @@ public class ConnectUI : MonoBehaviour
             label.normal.textColor = Color.white;
             field = new GUIStyle(GUI.skin.textField) { fontSize = 16 };
             button = new GUIStyle(GUI.skin.button) { fontSize = 16 };
+            selected = new GUIStyle(button) { fontStyle = FontStyle.Bold };
+            selected.normal.textColor = new Color(1f, 0.9f, 0.4f);
         }
 
         // Once running, offer only a way out — the address is locked in by then.
@@ -47,6 +49,17 @@ public class ConnectUI : MonoBehaviour
         GUI.Label(new Rect(240, 10, 60, 24), "Port", label);
         string portText = GUI.TextField(new Rect(240, 36, 70, 28), port.ToString(), field);
         if (ushort.TryParse(portText, out ushort p)) port = p;
+
+        // Loadout is chosen HERE, before connecting, and locked for the match. Picking after
+        // you spawn would make it a counter-pick rather than a commitment.
+        GUI.Label(new Rect(12, 112, 300, 24), "Weapon (locked for the match)", label);
+        for (int i = 0; i < LoadoutChoice.Names.Length; i++)
+        {
+            bool on = LoadoutChoice.WeaponIndex == i;
+            var s = on ? selected : button;
+            if (GUI.Button(new Rect(12 + i * 92, 138, 88, 30), LoadoutChoice.Names[i], s))
+                LoadoutChoice.WeaponIndex = i;
+        }
 
         // Host = server + local client, the normal way one player hosts for others.
         if (GUI.Button(new Rect(12, 72, 100, 32), "Host", button))

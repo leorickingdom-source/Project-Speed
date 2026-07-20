@@ -75,6 +75,15 @@ public class WeaponController : MonoBehaviour
     public float tracerTime = 0.04f;
 
     public int Current { get; private set; }
+
+    // Applied once by PlayerNetwork when the owning player spawns, then never changed —
+    // the loadout is locked for the match by design.
+    public void SetLockedWeapon(int index)
+    {
+        if (weapons == null || weapons.Length == 0) return;
+        Current = Mathf.Clamp(index, 0, weapons.Length - 1);
+        reloadDoneAt = 0f;
+    }
     public Weapon CurrentWeapon => (weapons != null && Current >= 0 && Current < weapons.Length) ? weapons[Current] : null;
     public string CurrentName => CurrentWeapon != null ? CurrentWeapon.name : "-";
     public int CurrentAmmo => CurrentWeapon != null ? CurrentWeapon.ammo : 0;

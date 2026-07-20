@@ -37,6 +37,14 @@ public class PlayerScore : NetworkBehaviour
         if (IsServerStarted) deaths.Value++;
     }
 
+    // Called by MatchManager between rounds.
+    public void ResetScore()
+    {
+        if (!IsServerStarted) return;
+        kills.Value = 0;
+        deaths.Value = 0;
+    }
+
     void OnGUI()
     {
         // Only the local player draws it, or every player in the scene would stack a copy.
