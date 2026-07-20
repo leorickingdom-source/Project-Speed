@@ -76,6 +76,7 @@ public class ConnectUI : MonoBehaviour
         }
         GUI.Label(new Rect(12, 170, panelW - 24f, 22),
             LoadoutChoice.Describe(LoadoutChoice.WeaponIndex), label);
+        GUI.Label(new Rect(330, 10, panelW - 342f, 22), "Map (host decides)", label);
 
         GUI.Label(new Rect(12, 200, 400, 24), "Passive (locked for the match)", label);
         var opts = PassiveChoice.Options;
@@ -92,6 +93,15 @@ public class ConnectUI : MonoBehaviour
         GUI.Label(new Rect(12, 300, panelW - 24f, 24),
             PassiveChoice.Describe(PassiveChoice.Selected), label);
 
+        // Map. Host-only in effect: the server loads it as a global scene and clients receive
+        // it when they join, so a client's selection here is ignored.
+        for (int i = 0; i < MapChoice.Names.Length; i++)
+        {
+            if (GUI.Button(new Rect(330 + i * 108, 36, 104, 28), MapChoice.Names[i],
+                    MapChoice.Index == i ? selected : button))
+                MapChoice.Index = i;
+        }
+
         // Game mode. Host-only in effect — MatchManager reads this on the server and syncs it,
         // so a client toggling it changes nothing about the match they join.
         if (GUI.Button(new Rect(330, 72, 214, 32),
@@ -104,6 +114,10 @@ public class ConnectUI : MonoBehaviour
         {
             ApplyTransport(nm);
             nm.ServerManager.StartConnection();
+            // Register the map BEFORE any client joins — including our own — so it arrives as
+            // part of the normal connection flow rather than yanking scenes out from under a
+            // client mid-handshake.
+            LoadChosenMap(nm);
             nm.ClientManager.StartConnection();
         }
 
@@ -119,6 +133,19 @@ public class ConnectUI : MonoBehaviour
             ApplyTransport(nm);
             nm.ServerManager.StartConnection();
         }
+    }
+
+    // Load the host's map as a global scene so joining clients receive it automatically.
+    // Skipped when we are already in it, since replacing a scene with itself would needlessly
+    // destroy and rebuild everything in it.
+    static void LoadChosenMap(FishNet.Managing.NetworkManager nm)
+    {
+        string want = MapChoice.Selected;
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == want) return;
+
+        var data = new FishNet.Managing.Scened.SceneLoadData(want);
+        data.ReplaceScenes = FishNet.Managing.Scened.ReplaceOption.All;
+        nm.SceneManager.LoadGlobalScenes(data);
     }
 
     // Push the typed address/port into the transport before any connection starts —

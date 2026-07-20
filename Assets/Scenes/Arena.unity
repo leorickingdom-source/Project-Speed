@@ -5027,6 +5027,7 @@ GameObject:
   - component: {fileID: 1843509050}
   - component: {fileID: 1843509055}
   - component: {fileID: 1843509056}
+  - component: {fileID: 1843509057}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -5164,6 +5165,19 @@ MonoBehaviour:
     _latency: 60
     _outOfOrder: 0
     _packetLoss: 0
+--- !u!114 &1843509057
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1843509049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b214c620a8acb2d4daa2ea2d90035035, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpawnPointBinder
+  prefix: SpawnPoint_
 --- !u!1 &1879600149
 GameObject:
   m_ObjectHideFlags: 0
