@@ -22,6 +22,42 @@ public class GameMenu : MonoBehaviour
     bool paused;
     GUIStyle panel, header, row, hint;
 
+    void Awake() => GameSettings.Load();
+
+    // Slider + live value. Applies on every change so the effect is felt while dragging —
+    // sensitivity in particular is impossible to judge without moving the mouse as you set it.
+    float SettingRow(float x, float y, float w, string name, float value, float min, float max,
+        string fmt)
+    {
+        GUI.Label(new Rect(x, y, w * 0.55f, 20f), name, row);
+        GUI.Label(new Rect(x + w * 0.55f, y, w * 0.45f, 20f), value.ToString(fmt), row);
+        return GUI.HorizontalSlider(new Rect(x, y + 20f, w, 16f), value, min, max);
+    }
+
+    void DrawSettings(float x, float y, float w)
+    {
+        GUI.Label(new Rect(x, y, w, 22f), "SETTINGS", header);
+        y += 24f;
+
+        float s = SettingRow(x, y, w, "Mouse sensitivity", GameSettings.Sensitivity,
+            GameSettings.SensRange.x, GameSettings.SensRange.y, "0.000");
+        y += 42f;
+        float v = SettingRow(x, y, w, "Volume", GameSettings.Volume, 0f, 1f, "0.00");
+        y += 42f;
+        float f = SettingRow(x, y, w, "Field of view", GameSettings.Fov,
+            GameSettings.FovRange.x, GameSettings.FovRange.y, "0");
+
+        if (!Mathf.Approximately(s, GameSettings.Sensitivity)
+            || !Mathf.Approximately(v, GameSettings.Volume)
+            || !Mathf.Approximately(f, GameSettings.Fov))
+        {
+            GameSettings.Sensitivity = s;
+            GameSettings.Volume = v;
+            GameSettings.Fov = f;
+            GameSettings.Apply();
+        }
+    }
+
     void Update()
     {
         var kb = Keyboard.current;
@@ -33,6 +69,9 @@ public class GameMenu : MonoBehaviour
 
     void SetPaused(bool p)
     {
+        // Write on close rather than on every slider tick — dragging a slider would otherwise
+        // hit the disk dozens of times a second.
+        if (paused && !p) GameSettings.Save();
         paused = p;
         Time.timeScale = p ? 0f : 1f;
         Cursor.lockState = p ? CursorLockMode.None : CursorLockMode.Locked;
@@ -70,9 +109,10 @@ public class GameMenu : MonoBehaviour
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
             GUI.color = Color.white;
 
-            float w = 372f, h = 320f, x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
+            float w = 400f, h = 470f, x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
             GUI.Box(new Rect(x, y, w, h), "PAUSED", panel);
             ControlsCard(new Rect(x + 16f, y + 46f, w - 32f, Controls.Length * 24f + 6f), null);
+            DrawSettings(x + 16f, y + 56f + Controls.Length * 24f, w - 32f);
             if (GUI.Button(new Rect(x + 16f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Resume  (Esc)")) SetPaused(false);
             if (GUI.Button(new Rect(x + w * 0.5f + 4f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Quit  (Q)")) Quit();
         }

@@ -117,6 +117,9 @@ public class PlayerNetwork : TickNetworkBehaviour
             // The F1-F7 runtime picker is an offline testing tool. Both loadouts are locked
             // once networked, and leaving it visible would suggest otherwise.
             DisableIfPresent(GetComponent<PassivePicker>());
+            // Saved sensitivity / FOV / volume only exist once this player's components do.
+            GameSettings.Load();
+            GameSettings.Apply();
             return;
         }
 
