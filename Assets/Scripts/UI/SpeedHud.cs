@@ -1,65 +1,138 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-// Minimal on-screen readout for tuning movement feel. Replace with real UI later.
+// Player-facing HUD. Speed is a GAUGE rather than a number: in a momentum game what matters
+// is whether you're building or bleeding speed, which a filling bar shows at a glance while
+// a decimal readout forces you to read and compare.
+//
+// The gauge marks groundSpeed, because that's the meaningful line — PlayerMotor hard-caps
+// running there, so everything past the mark is speed you earned by bhopping, sliding or
+// grappling. Momentum's damage bonus ramps over the same range, so the bar doubles as that
+// passive's readout without a separate number.
+//
+// Engine internals (raw velocity, grounded, flow multiplier, stance) are dev data and are
+// hidden behind F3 rather than shown to players.
 public class SpeedHud : MonoBehaviour
 {
     public PlayerMotor motor;
     public PlayerHealth health;
     public WeaponController weapon;
-    GUIStyle style;
+
+    [Header("Speed gauge")]
+    [Tooltip("Speed the bar reads as full. 20 sits just above the dash (18) and slide ceiling (16).")]
+    public float maxDisplaySpeed = 20f;
+    public float barWidth = 260f;
+    public float barHeight = 10f;
+    [Tooltip("Bottom margin in pixels.")]
+    public float bottomMargin = 28f;
+
+    [Header("Debug")]
+    [Tooltip("F3 toggles the raw engine readouts. Off for players.")]
+    public bool showDebug = false;
+
+    GUIStyle big, small, dim;
+    Texture2D pixel;
 
     void Awake()
     {
         if (motor == null) motor = GetComponent<PlayerMotor>();
         if (motor == null) motor = FindAnyObjectByType<PlayerMotor>();
         if (health == null && motor != null) health = motor.GetComponent<PlayerHealth>();
-        if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
-        if (weapon == null) weapon = FindAnyObjectByType<WeaponController>();
+
+        pixel = new Texture2D(1, 1);
+        pixel.SetPixel(0, 0, Color.white);
+        pixel.Apply();
+    }
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb != null && kb.f3Key.wasPressedThisFrame) showDebug = !showDebug;
+    }
+
+    void Box(float x, float y, float w, float h, Color c)
+    {
+        GUI.color = c;
+        GUI.DrawTexture(new Rect(x, y, w, h), pixel);
+        GUI.color = Color.white;
     }
 
     void OnGUI()
     {
         if (motor == null) return;
-        if (style == null)
+        if (big == null)
         {
-            style = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
-            style.normal.textColor = Color.white;
+            big = new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold };
+            big.normal.textColor = Color.white;
+            small = new GUIStyle(GUI.skin.label) { fontSize = 15 };
+            small.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
+            dim = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+            dim.normal.textColor = new Color(1f, 1f, 1f, 0.45f);
         }
-        GUI.Label(new Rect(14, 10, 600, 28), $"SPEED  {motor.Speed:0.0} m/s", style);
-        GUI.Label(new Rect(14, 40, 600, 28), $"grounded  {motor.grounded}", style);
-        GUI.Label(new Rect(14, 70, 600, 28),
-            $"vel  x{motor.velocity.x:0.0}  y{motor.velocity.y:0.0}  z{motor.velocity.z:0.0}", style);
-        string stance = motor.sliding ? "SLIDE" : motor.crouching ? "crouch" : "stand";
-        // Momentum multiplier is appended rather than given its own row, so the fixed
-        // Y offsets below don't all have to shift. Hidden at 1.00x (passive off / too slow).
-        // Reads the weapon's combined multiplier, so any damage passive shows up here.
-        string dmg = weapon != null && weapon.DamageScale > 1.001f
-            ? $"    DMG x{weapon.DamageScale:0.00}" : "";
-        string dash = motor.HasDash
-            ? (motor.DashCooldownLeft > 0f ? $"    dash {motor.DashCooldownLeft:0.0}s" : "    DASH")
-            : "";
-        GUI.Label(new Rect(14, 100, 600, 28),
-            $"flow  x{motor.flow:0.00}    [{stance}]{dmg}{dash}", style);
 
-        // Health.
+        float sw = Screen.width, sh = Screen.height;
+        float barX = (sw - barWidth) * 0.5f, barY = sh - bottomMargin - barHeight;
+
+        // --- speed gauge ---
+        float t = Mathf.Clamp01(motor.Speed / Mathf.Max(0.01f, maxDisplaySpeed));
+        Box(barX - 1f, barY - 1f, barWidth + 2f, barHeight + 2f, new Color(0f, 0f, 0f, 0.45f));
+
+        // Warms as you pass the running cap — the visual cue that you're in earned-speed
+        // territory, which is also where Momentum's bonus lives.
+        float runT = motor.groundSpeed / Mathf.Max(0.01f, maxDisplaySpeed);
+        Color fill = t <= runT
+            ? new Color(0.55f, 0.75f, 0.95f, 0.9f)
+            : Color.Lerp(new Color(0.95f, 0.75f, 0.3f, 0.95f), new Color(1f, 0.45f, 0.25f, 1f),
+                Mathf.InverseLerp(runT, 1f, t));
+        Box(barX, barY, barWidth * t, barHeight, fill);
+
+        // Tick at the running cap.
+        Box(barX + barWidth * runT, barY - 3f, 1.5f, barHeight + 6f, new Color(1f, 1f, 1f, 0.55f));
+
+        // --- health (left) and ammo (right), the two numbers a player actually needs ---
         if (health != null)
         {
-            string hpText = health.Alive
-                ? $"HP  {health.Hp:0}{(health.Invulnerable ? "  (invuln)" : "")}"
-                : "DEAD — respawning";
-            GUI.Label(new Rect(14, 132, 600, 28), hpText, style);
+            string hp = health.Alive ? $"{health.Hp:0}" : "DEAD";
+            GUI.Label(new Rect(28f, sh - bottomMargin - 34f, 200f, 34f), hp, big);
+            if (health.Alive && health.Invulnerable)
+                GUI.Label(new Rect(28f, sh - bottomMargin - 52f, 200f, 20f), "invulnerable", dim);
         }
 
-        // Current weapon + ammo.
         if (weapon != null)
         {
-            string ammo = weapon.Reloading ? "reloading..." : $"{weapon.CurrentAmmo}/{weapon.CurrentMag}";
-            GUI.Label(new Rect(14, 162, 600, 28), $"WEAPON  {weapon.CurrentName}   {ammo}   [R] reload", style);
+            string ammo = weapon.Reloading ? "reloading" : $"{weapon.CurrentAmmo} / {weapon.CurrentMag}";
+            var r = new Rect(sw - 228f, sh - bottomMargin - 34f, 200f, 34f);
+            var right = new GUIStyle(big) { alignment = TextAnchor.MiddleRight };
+            GUI.Label(r, ammo, right);
+            var rightSmall = new GUIStyle(small) { alignment = TextAnchor.MiddleRight };
+            GUI.Label(new Rect(sw - 228f, sh - bottomMargin - 54f, 200f, 20f), weapon.CurrentName, rightSmall);
         }
 
-        // Center crosshair dot (aim point for the grapple).
-        float cx = Screen.width * 0.5f, cy = Screen.height * 0.5f;
-        GUI.DrawTexture(new Rect(cx - 2f, cy - 2f, 4f, 4f), Texture2D.whiteTexture);
+        // Dash readiness — an ability the player is entitled to see.
+        if (motor.HasDash)
+        {
+            bool ready = motor.DashCooldownLeft <= 0f;
+            GUI.Label(new Rect(barX, barY - 22f, barWidth, 18f),
+                ready ? "DASH" : $"dash {motor.DashCooldownLeft:0.0}s",
+                ready ? small : dim);
+        }
+
+        // Center crosshair dot.
+        GUI.DrawTexture(new Rect(sw * 0.5f - 2f, sh * 0.5f - 2f, 4f, 4f), Texture2D.whiteTexture);
+
+        if (showDebug) DrawDebug();
+    }
+
+    // Engine internals. Dev-only — this is the data that used to be on screen permanently.
+    void DrawDebug()
+    {
+        string stance = motor.sliding ? "SLIDE" : motor.crouching ? "crouch" : "stand";
+        string dmg = weapon != null && weapon.DamageScale > 1.001f
+            ? $"   dmg x{weapon.DamageScale:0.00}" : "";
+        GUI.Label(new Rect(14, 10, 700, 20), $"speed {motor.Speed:0.0} m/s   grounded {motor.grounded}   [{stance}]{dmg}", dim);
+        GUI.Label(new Rect(14, 30, 700, 20),
+            $"vel  x{motor.velocity.x:0.0}  y{motor.velocity.y:0.0}  z{motor.velocity.z:0.0}   flow x{motor.flow:0.00}", dim);
+        GUI.Label(new Rect(14, 50, 700, 20), "F3 hides this", dim);
     }
 }
