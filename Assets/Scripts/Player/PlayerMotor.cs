@@ -128,6 +128,12 @@ public class PlayerMotor : MonoBehaviour
     // leak into a saved scene (which once shipped a build where the player couldn't move).
     public bool Frozen { get; set; }
 
+    // Set by PlayerNetwork while networking is running: the FishNet tick calls Step() from
+    // inside [Replicate], so FixedUpdate must NOT also step or the sim advances twice per
+    // tick. Auto-property (never serialized) so it can't leak into a saved scene, and it
+    // clears on OnStopNetwork so offline play falls back to FixedUpdate.
+    public bool ExternallyDriven { get; set; }
+
     // True while the grapple is reeling — used to drop ground-glue so it can lift you.
     bool Grappling => grapple != null && grapple.Attached;
 
@@ -161,7 +167,8 @@ public class PlayerMotor : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (Frozen) return; // dead / respawning — skip the sim (see PlayerHealth)
+        if (Frozen) return;           // dead / respawning — skip the sim (see PlayerHealth)
+        if (ExternallyDriven) return; // the network tick steps us instead (see PlayerNetwork)
         // Local play: build the tick command from live input and step the sim.
         Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
     }
