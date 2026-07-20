@@ -1,11 +1,17 @@
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 
-// The player's hit points. Takes damage through IDamageable (rocket splash, bots, and
-// other players later), dies and respawns at the spawn point with a short invulnerability
-// window. No passive regen by default (arena-style — grab health pickups); set
-// regenPerSec > 0 for a Halo-style recharge.
+// The player's hit points. Takes damage through IDamageable (bots, other players), dies and
+// respawns at the spawn point with a short invulnerability window. No passive regen by
+// default (arena-style); set regenPerSec > 0 for a Halo-style recharge.
+//
+// SERVER-AUTHORITATIVE once networked: HP lives in a SyncVar that only the server writes,
+// so every client sees the same health and a client cannot heal itself by editing memory.
+// Offline (not spawned) it keeps full local authority, so single-player still works exactly
+// as before — that's what HasAuthority encodes.
 [RequireComponent(typeof(PlayerMotor))]
-public class PlayerHealth : MonoBehaviour, IDamageable
+public class PlayerHealth : NetworkBehaviour, IDamageable
 {
     [Header("Health")]
     [Tooltip("BASE max HP, before passives. Read MaxHp for the effective value. 150 keeps the " +
@@ -39,9 +45,17 @@ public class PlayerHealth : MonoBehaviour, IDamageable
              "0 = off.")]
     public float killDist = 48f;
 
-    public float Hp { get; private set; }
-    public bool Alive { get; private set; } = true;
+    // The single source of truth for health. Only the server assigns it once spawned;
+    // clients receive it and react through OnChange.
+    readonly SyncVar<float> hp = new SyncVar<float>();
+
+    public float Hp => hp.Value;
+    // Derived rather than stored, so it can never disagree with the synced HP.
+    public bool Alive => hp.Value > 0f;
     public bool Invulnerable => Time.time < invulnUntil;
+
+    // Who may mutate health: the server when networked, ourselves when running offline.
+    bool HasAuthority => !IsSpawned || IsServerStarted;
 
     // Effective ceiling = base + passives. Everything that clamps or refills reads THIS,
     // never the raw maxHp field, so equipping Vitality can't leave you capped at the base.
@@ -62,25 +76,43 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         passives = GetComponent<PassiveLoadout>(); // optional — null means no passives equipped
         if (spawnPoint != null) { spawnPos = spawnPoint.position; spawnRot = spawnPoint.rotation; }
         else { spawnPos = transform.position; spawnRot = transform.rotation; }
-        Hp = MaxHp;
+        hp.Value = MaxHp;
         invulnUntil = Time.time + spawnInvuln;
+        // Every client reacts to health changes locally (freeze on death, unfreeze on
+        // respawn) even though only the server decides them.
+        hp.OnChange += OnHpChanged;
+    }
+
+    void OnDestroy() => hp.OnChange -= OnHpChanged;
+
+    void OnHpChanged(float prev, float next, bool asServer)
+    {
+        if (prev > 0f && next <= 0f) ApplyDeadState();
+        else if (prev <= 0f && next > 0f) ApplyAliveState();
     }
 
     public void Damage(float amount)
     {
         if (!Alive || Invulnerable || amount <= 0f) return;
-        Hp = Mathf.Max(0f, Hp - amount);
+        // Clients never write health — they ask the server (see PlayerNetwork.ReportHit).
+        if (!HasAuthority) return;
+        hp.Value = Mathf.Max(0f, hp.Value - amount);
         lastDamageTime = Time.time;
-        if (Hp <= 0f) Die();
+        if (hp.Value <= 0f) Die();
     }
 
     public void Heal(float amount)
     {
-        if (Alive && amount > 0f) Hp = Mathf.Min(MaxHp, Hp + amount);
+        if (!Alive || amount <= 0f || !HasAuthority) return;
+        hp.Value = Mathf.Min(MaxHp, hp.Value + amount);
     }
 
     void Update()
     {
+        // Death, respawn timing, out-of-bounds and regen are all authority decisions; clients
+        // just render the result. Without this every client would run its own respawn clock.
+        if (!HasAuthority) return;
+
         if (!Alive)
         {
             if (Time.time >= reviveAt) Respawn();
@@ -92,29 +124,41 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         Vector3 p = transform.position;
         if (p.y < killY || (killDist > 0f && (Mathf.Abs(p.x) > killDist || Mathf.Abs(p.z) > killDist)))
         {
+            hp.Value = 0f;
             Die();
             return;
         }
 
-        if (regenPerSec > 0f && Hp < MaxHp && Time.time - lastDamageTime >= regenDelay)
-            Hp = Mathf.Min(MaxHp, Hp + regenPerSec * Time.deltaTime);
+        if (regenPerSec > 0f && hp.Value < MaxHp && Time.time - lastDamageTime >= regenDelay)
+            hp.Value = Mathf.Min(MaxHp, hp.Value + regenPerSec * Time.deltaTime);
     }
 
+    // Authority-side death: schedule the revive. The visible freeze is applied by
+    // ApplyDeadState via the SyncVar callback, so it happens on every client, not just here.
     void Die()
     {
-        Alive = false;
         reviveAt = Time.time + respawnDelay;
-        motor.velocity = Vector3.zero;
-        motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
+        ApplyDeadState();
     }
 
     void Respawn()
     {
         transform.SetPositionAndRotation(spawnPos, spawnRot);
+        hp.Value = MaxHp; // drives ApplyAliveState everywhere through OnChange
+        invulnUntil = Time.time + spawnInvuln;
+    }
+
+    void ApplyDeadState()
+    {
+        if (motor == null) return;
+        motor.velocity = Vector3.zero;
+        motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
+    }
+
+    void ApplyAliveState()
+    {
+        if (motor == null) return;
         motor.velocity = Vector3.zero;
         motor.Frozen = false;
-        Hp = MaxHp;
-        Alive = true;
-        invulnUntil = Time.time + spawnInvuln;
     }
 }

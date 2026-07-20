@@ -78,6 +78,8 @@ public class WeaponController : MonoBehaviour
     MomentumDamage momentum;
     HighgroundDamage highground;
     CamperDamage camper;
+    PlayerNetwork net;                       // null offline
+    readonly RaycastHit[] rayHits = new RaycastHit[16];
 
     // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
     // pick-one means at most one is ever above 1 — multiplying keeps it correct either way
@@ -99,7 +101,10 @@ public class WeaponController : MonoBehaviour
         highground = GetComponent<HighgroundDamage>(); // optional — absent means no height bonus
         camper = GetComponent<CamperDamage>();         // optional — absent means no standstill bonus
         if (aim == null) { var c = GetComponentInChildren<Camera>(); if (c) aim = c.transform; }
-        hitMask &= ~(1 << gameObject.layer);
+        // NOTE: the player layer is deliberately NOT stripped from hitMask. It used to be,
+        // which meant every player was invisible to hitscan and nobody could damage anyone.
+        // Self-hits are excluded per-hit by transform root instead (see NearestHitIgnoringSelf).
+        net = GetComponent<PlayerNetwork>();
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
         BuildPool(16);
@@ -247,8 +252,7 @@ public class WeaponController : MonoBehaviour
                 dir = (aim.forward + aim.right * off.x + aim.up * off.y).normalized;
             }
             Vector3 end = origin + dir * w.range;
-            if (Physics.Raycast(origin, dir, out RaycastHit hit, w.range, hitMask,
-                    QueryTriggerInteraction.Ignore))
+            if (NearestHitIgnoringSelf(origin, dir, w.range, out RaycastHit hit))
             {
                 end = hit.point;
                 var hp = hit.collider.GetComponentInParent<IDamageable>();
@@ -256,7 +260,7 @@ public class WeaponController : MonoBehaviour
                 {
                     // Headshot: hit lands in the top slice of the target's collider.
                     bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
-                    hp.Damage((head ? w.damage * headMultiplier : w.damage) * scale);
+                    ApplyDamage(hit.collider, hp, (head ? w.damage * headMultiplier : w.damage) * scale);
                 }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
@@ -285,6 +289,36 @@ public class WeaponController : MonoBehaviour
         proj.headFraction = headFraction;
         proj.damageScale = DamageScale;  // sampled at launch, like the rocket
         proj.Launch(aim.forward, w.damage, hitMask, gameObject);
+    }
+
+    // Closest hit that isn't part of this player. Needed because the player layer must stay
+    // IN hitMask for players to be shootable at all, which also means our own capsule sits
+    // right on the muzzle — a plain Raycast would hit ourselves and block every shot.
+    bool NearestHitIgnoringSelf(Vector3 origin, Vector3 dir, float range, out RaycastHit best)
+    {
+        best = default;
+        int n = Physics.RaycastNonAlloc(origin, dir, rayHits, range, hitMask,
+            QueryTriggerInteraction.Ignore);
+        float bestDist = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            if (rayHits[i].collider.transform.root == transform.root) continue; // ourselves
+            if (rayHits[i].distance >= bestDist) continue;
+            bestDist = rayHits[i].distance;
+            best = rayHits[i];
+            found = true;
+        }
+        return found;
+    }
+
+    // Networked players must be damaged by the SERVER or the hit only exists on the shooter's
+    // screen. Anything without a NetworkObject (dummies, offline play) is applied locally.
+    void ApplyDamage(Collider victim, IDamageable hp, float damage)
+    {
+        var nob = victim.GetComponentInParent<FishNet.Object.NetworkObject>();
+        if (net != null && net.IsSpawned && nob != null) net.ReportHit(nob, damage);
+        else hp.Damage(damage);
     }
 
     void FireProjectile(Weapon w)

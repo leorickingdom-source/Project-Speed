@@ -151,6 +151,21 @@ public class PlayerNetwork : TickNetworkBehaviour
         motor.Step(md.Cmd, (float)base.TimeManager.TickDelta);
     }
 
+    // Damage is applied on the SERVER only. The shooting client detects its own hit and
+    // reports it here; the server applies it to the victim's PlayerHealth, whose SyncVar
+    // then replicates the new health to everyone.
+    //
+    // This trusts the client's hit claim — standard for a prototype, and the honest
+    // alternative (server-side raycast with lag compensation) is a much larger job. Swap
+    // this out before anything competitive.
+    [FishNet.Object.ServerRpc]
+    public void ReportHit(FishNet.Object.NetworkObject victim, float damage)
+    {
+        if (victim == null || damage <= 0f) return;
+        var hp = victim.GetComponent<PlayerHealth>();
+        if (hp != null) hp.Damage(damage);
+    }
+
     [Reconcile]
     void PerformReconcile(ReconcileData rd, Channel channel = Channel.Unreliable)
     {
