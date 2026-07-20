@@ -28,11 +28,20 @@ public class HitFeedback : MonoBehaviour
     public float hitHz = 1000f;
     public float killHz = 420f;
 
+    [Header("Damage direction")]
+    [Tooltip("Seconds the incoming-damage wedge stays up.")]
+    public float damageIndicatorTime = 1.1f;
+    public Color damageColor = new Color(1f, 0.25f, 0.2f, 0.9f);
+
     AudioSource audioSrc;
     AudioClip hitClip, killClip;
     float markerUntil;
     bool lastWasKill;
     Texture2D pixel;
+
+    // World position of whoever last hit us, and when it expires.
+    Vector3 damageFrom;
+    float damageUntil;
 
     void Awake()
     {
@@ -83,8 +92,56 @@ public class HitFeedback : MonoBehaviour
         return clip;
     }
 
+    // Called from the server's damage report. Stores where the shot came from so the wedge can
+    // be drawn relative to wherever the player is looking at the time, not where they looked
+    // when hit — otherwise turning would leave the indicator pointing at nothing.
+    public void ShowDamageFrom(Vector3 worldPos)
+    {
+        damageFrom = worldPos;
+        damageUntil = Time.time + damageIndicatorTime;
+    }
+
+    // A wedge offset from the crosshair in the attacker's direction. Signed angle against the
+    // camera's forward, so it stays correct as you turn to face them.
+    void DrawDamageDirection()
+    {
+        if (Time.time > damageUntil) return;
+        var cam = GetComponentInChildren<Camera>();
+        if (cam == null) return;
+
+        Vector3 to = damageFrom - transform.position;
+        to.y = 0f;
+        if (to.sqrMagnitude < 0.01f) return;
+
+        Vector3 fwd = cam.transform.forward;
+        fwd.y = 0f;
+        if (fwd.sqrMagnitude < 0.01f) return;
+
+        float angle = Vector3.SignedAngle(fwd.normalized, to.normalized, Vector3.up);
+        float fade = Mathf.Clamp01((damageUntil - Time.time) / Mathf.Max(0.01f, damageIndicatorTime));
+
+        float cx = Screen.width * 0.5f, cy = Screen.height * 0.5f;
+        float radius = Mathf.Min(Screen.width, Screen.height) * 0.22f;
+        float rad = angle * Mathf.Deg2Rad;
+        float x = cx + Mathf.Sin(rad) * radius;
+        float y = cy - Mathf.Cos(rad) * radius;
+
+        var c = damageColor;
+        c.a *= fade;
+        GUI.color = c;
+        // Simple thick bar, rotated to sit tangential to the ring around the crosshair.
+        var pivot = new Vector2(x, y);
+        var m = GUI.matrix;
+        GUIUtility.RotateAroundPivot(angle, pivot);
+        GUI.DrawTexture(new Rect(x - 26f, y - 4f, 52f, 8f), pixel);
+        GUI.matrix = m;
+        GUI.color = Color.white;
+    }
+
     void OnGUI()
     {
+        DrawDamageDirection();
+
         if (Time.time > markerUntil) return;
 
         // Four ticks angling out from the crosshair — the classic shape, and readable against

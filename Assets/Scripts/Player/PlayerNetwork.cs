@@ -191,6 +191,12 @@ public class PlayerNetwork : TickNetworkBehaviour
         bool wasAlive = hp.Alive;
         hp.Damage(damage);
 
+        // Point the victim back at us. Sent from the victim's own PlayerNetwork so the TargetRpc
+        // reaches their client, with our position as the source.
+        var victimNet = victim.GetComponent<PlayerNetwork>();
+        if (victimNet != null && victim.Owner != null)
+            victimNet.ShowDamageFrom(victim.Owner, transform.position);
+
         // Only the server knows whether that killed them — health is server-owned — so the
         // kill cue has to come back to the shooter rather than being guessed locally.
         if (wasAlive && !hp.Alive)
@@ -222,6 +228,31 @@ public class PlayerNetwork : TickNetworkBehaviour
     {
         var a = GetComponent<PlayerAudio>();
         if (a != null) a.PlayFire(weaponIndex);
+    }
+
+    // Shot lines for everyone else. Without this an enemy could fire at you from across the
+    // map with nothing at all on screen — WeaponController is disabled on non-owners, so its
+    // tracers never existed for observers.
+    [FishNet.Object.ServerRpc]
+    public void ReportTracer(Vector3 from, Vector3 to)
+    {
+        BroadcastTracer(from, to);
+    }
+
+    [FishNet.Object.ObserversRpc(ExcludeOwner = true)]
+    void BroadcastTracer(Vector3 from, Vector3 to)
+    {
+        var tr = GetComponent<TracerRenderer>();
+        if (tr != null) tr.Show(from, to, new Color(1f, 0.85f, 0.5f, 1f), 0.06f);
+    }
+
+    // Tells the VICTIM which direction the shot came from. Being hit with no idea where from
+    // is the worst case in a fast game — you cannot even choose which way to break.
+    [FishNet.Object.TargetRpc]
+    void ShowDamageFrom(FishNet.Connection.NetworkConnection conn, Vector3 worldPos)
+    {
+        var fb = GetComponent<HitFeedback>();
+        if (fb != null) fb.ShowDamageFrom(worldPos);
     }
 
     [FishNet.Object.TargetRpc]

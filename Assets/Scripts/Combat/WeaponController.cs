@@ -116,6 +116,7 @@ public class WeaponController : MonoBehaviour
     PlayerNetwork net;                       // null offline
     HitFeedback feedback;                    // owner-only shot confirmation
     PlayerAudio audioFx;
+    TracerRenderer tracers;                  // stays active on remote players too
     readonly RaycastHit[] rayHits = new RaycastHit[16];
 
     // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
@@ -127,9 +128,6 @@ public class WeaponController : MonoBehaviour
 
     float nextFire;
     float reloadDoneAt;
-    LineRenderer[] pool;
-    float[] poolHide;
-    int poolNext;
 
     void Awake()
     {
@@ -144,10 +142,10 @@ public class WeaponController : MonoBehaviour
         net = GetComponent<PlayerNetwork>();
         feedback = GetComponent<HitFeedback>();
         audioFx = GetComponent<PlayerAudio>();
+        tracers = GetComponent<TracerRenderer>();
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
         Current = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
-        BuildPool(16);
     }
 
     static Weapon[] DefaultLoadout() => new[]
@@ -208,27 +206,6 @@ public class WeaponController : MonoBehaviour
         //              magSize = 8, reloadTime = 1.5f },
     };
 
-    void BuildPool(int n)
-    {
-        pool = new LineRenderer[n];
-        poolHide = new float[n];
-        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
-        if (sh == null) sh = Shader.Find("Sprites/Default");
-        for (int i = 0; i < n; i++)
-        {
-            var go = new GameObject("Tracer" + i);
-            go.transform.SetParent(transform);
-            var lr = go.AddComponent<LineRenderer>();
-            lr.positionCount = 2;
-            lr.widthMultiplier = 0.03f;
-            lr.useWorldSpace = true;
-            lr.numCapVertices = 2;
-            lr.material = new Material(sh);
-            lr.enabled = false;
-            pool[i] = lr;
-        }
-    }
-
     void Update()
     {
         if (Time.timeScale == 0f) return; // no firing / switching while paused
@@ -277,9 +254,7 @@ public class WeaponController : MonoBehaviour
             }
         }
 
-        if (pool != null)
-            for (int i = 0; i < pool.Length; i++)
-                if (pool[i].enabled && Time.time > poolHide[i]) pool[i].enabled = false;
+        // Tracer expiry moved to TracerRenderer, which stays active on remote players too.
     }
 
     void StartReload()
@@ -415,18 +390,11 @@ public class WeaponController : MonoBehaviour
         rocket.Launch(aim.forward, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
     }
 
+    // Delegates to the always-active renderer, and tells observers so they see the shot too.
     void Tracer(Vector3 a, Vector3 b, Color col)
     {
-        if (pool == null) return;
-        int idx = poolNext;
-        poolNext = (poolNext + 1) % pool.Length;
-        var lr = pool[idx];
-        lr.startColor = lr.endColor = col;
-        if (lr.material.HasProperty("_BaseColor")) lr.material.SetColor("_BaseColor", col);
-        lr.material.color = col;
-        lr.SetPosition(0, a);
-        lr.SetPosition(1, b);
-        lr.enabled = true;
-        poolHide[idx] = Time.time + tracerTime;
+        if (tracers != null) tracers.Show(a, b, col, tracerTime);
+        if (net != null && net.IsSpawned) net.ReportTracer(a, b);
     }
+
 }

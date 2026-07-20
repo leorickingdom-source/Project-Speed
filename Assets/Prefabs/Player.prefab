@@ -30,6 +30,7 @@ GameObject:
   - component: {fileID: 558183095219181554}
   - component: {fileID: 5162052341215088859}
   - component: {fileID: 9007662051478308311}
+  - component: {fileID: 1906537534948185615}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -575,6 +576,8 @@ MonoBehaviour:
   volume: 0.35
   hitHz: 1000
   killHz: 420
+  damageIndicatorTime: 1.1
+  damageColor: {r: 1, g: 0.25, b: 0.2, a: 0.9}
 --- !u!114 &5162052341215088859
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -608,6 +611,20 @@ MonoBehaviour:
   maxDistance: 60
   stepDistance: 2.6
   minStepSpeed: 2
+--- !u!114 &1906537534948185615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919031712746202489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17735f8e68659654cb7f41450710cebc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TracerRenderer
+  poolSize: 16
+  width: 0.03
 --- !u!1 &2614098738509366517
 GameObject:
   m_ObjectHideFlags: 0
