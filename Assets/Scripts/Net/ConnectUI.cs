@@ -92,6 +92,13 @@ public class ConnectUI : MonoBehaviour
         GUI.Label(new Rect(12, 300, panelW - 24f, 24),
             PassiveChoice.Describe(PassiveChoice.Selected), label);
 
+        // Game mode. Host-only in effect — MatchManager reads this on the server and syncs it,
+        // so a client toggling it changes nothing about the match they join.
+        if (GUI.Button(new Rect(330, 72, 214, 32),
+                GameModeChoice.Pickups ? "Mode: Health Pickups" : "Mode: Pure Deathmatch",
+                GameModeChoice.Pickups ? selected : button))
+            GameModeChoice.Pickups = !GameModeChoice.Pickups;
+
         // Host = server + local client, the normal way one player hosts for others.
         if (GUI.Button(new Rect(12, 72, 100, 32), "Host", button))
         {

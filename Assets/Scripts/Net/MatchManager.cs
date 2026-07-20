@@ -19,7 +19,18 @@ public class MatchManager : NetworkBehaviour
     // -1 means a round is in progress.
     readonly SyncVar<int> winnerId = new SyncVar<int>(-1);
 
+    // Game mode, decided by whoever hosts and synced so clients cannot disagree about whether
+    // map resources exist.
+    readonly SyncVar<bool> pickupsEnabled = new SyncVar<bool>(false);
+
     public bool MatchOver => winnerId.Value >= 0;
+    public bool PickupsEnabled => pickupsEnabled.Value;
+
+    public override void OnStartServer()
+    {
+        base.OnStartServer();
+        pickupsEnabled.Value = GameModeChoice.Pickups; // the host's connect-screen choice
+    }
 
     float resetAt;
     GUIStyle banner, sub;
