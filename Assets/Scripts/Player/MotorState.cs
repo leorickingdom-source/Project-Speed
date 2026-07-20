@@ -27,4 +27,11 @@ public struct MotorState
     public float slideBoostCooldown;
     public float dashCooldownLeft;
     public float dashGraceLeft;
+
+    // Grapple lives on GrappleHook but shapes velocity every tick through ApplyTo, so it has
+    // to reconcile with the rest or a corrected client would replay with the rope in the
+    // wrong state — reeling when the server says it let go, or vice versa.
+    public bool grappleAttached;
+    public Vector3 grappleAnchor;
+    public bool grappleHeld;      // edge-detect state; without it a replay can re-fire a press
 }

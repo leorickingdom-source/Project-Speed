@@ -34,6 +34,22 @@ public class GrappleHook : MonoBehaviour
     public bool Attached { get; private set; }
     public Vector3 Anchor { get; private set; }
 
+    // Snapshot / restore for reconciliation — the motor folds these into MotorState so a
+    // corrected client replays with the rope in exactly the state the server had.
+    public void GetNetState(out bool attached, out Vector3 anchor, out bool held)
+    {
+        attached = Attached;
+        anchor = Anchor;
+        held = wasHeld;
+    }
+
+    public void SetNetState(bool attached, Vector3 anchor, bool held)
+    {
+        Attached = attached;
+        Anchor = anchor;
+        wasHeld = held;
+    }
+
     LineRenderer line;
     bool wasHeld;
     const float center = 1f;          // pull reference = feet + up*center (capsule middle)

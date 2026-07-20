@@ -167,7 +167,6 @@ public class PlayerMotor : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (Frozen) return;           // dead / respawning — skip the sim (see PlayerHealth)
         if (ExternallyDriven) return; // the network tick steps us instead (see PlayerNetwork)
         // Local play: build the tick command from live input and step the sim.
         Step(input != null ? input.Sample() : InputCmd.None, Time.fixedDeltaTime);
@@ -176,20 +175,26 @@ public class PlayerMotor : MonoBehaviour
     // Snapshot / restore the full mutable sim state. Reconciliation captures the server's
     // authoritative MotorState, SetState()s it, then replays buffered commands through Step().
     // Nothing calls these until the network layer exists — pure additions, no behavior change.
-    public MotorState GetState() => new MotorState
+    public MotorState GetState()
     {
-        position = transform.position,
-        velocity = velocity,
-        grounded = grounded,
-        groundNormal = groundNormal,
-        crouching = crouching,
-        sliding = sliding,
-        height = height,
-        flow = flow,
-        slideBoostCooldown = slideBoostCooldown,
-        dashCooldownLeft = dashCooldownLeft,
-        dashGraceLeft = dashGraceLeft,
-    };
+        var s = new MotorState
+        {
+            position = transform.position,
+            velocity = velocity,
+            grounded = grounded,
+            groundNormal = groundNormal,
+            crouching = crouching,
+            sliding = sliding,
+            height = height,
+            flow = flow,
+            slideBoostCooldown = slideBoostCooldown,
+            dashCooldownLeft = dashCooldownLeft,
+            dashGraceLeft = dashGraceLeft,
+        };
+        if (grapple != null)
+            grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld);
+        return s;
+    }
 
     public void SetState(MotorState s)
     {
@@ -204,6 +209,8 @@ public class PlayerMotor : MonoBehaviour
         slideBoostCooldown = s.slideBoostCooldown;
         dashCooldownLeft = s.dashCooldownLeft;
         dashGraceLeft = s.dashGraceLeft;
+        if (grapple != null)
+            grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld);
         UpdateCapsule(); // collider must match the restored height before the next cast
     }
 
@@ -213,6 +220,11 @@ public class PlayerMotor : MonoBehaviour
     // reads, no Time.time.
     public void Step(InputCmd cmd, float dt)
     {
+        // Dead / respawning. Checked HERE rather than only in FixedUpdate, because the
+        // networked path calls Step() directly from [Replicate] — with the check only in
+        // FixedUpdate, a dead player kept simulating and could fly around while frozen.
+        if (Frozen) return;
+
         // Ticked at the top so the grounded branch below reads it in the same tick it was set.
         dashGraceLeft = Mathf.Max(0f, dashGraceLeft - dt);
 
