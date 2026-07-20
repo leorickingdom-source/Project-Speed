@@ -50,7 +50,7 @@ public class PlayerScore : NetworkBehaviour
     void OnGUI()
     {
         // Only the local player draws it, or every player in the scene would stack a copy.
-        if (!showScoreboard || !IsOwner) return;
+        if (!showScoreboard || !IsOwner || GameMenu.IsPaused) return;
 
         if (style == null)
         {

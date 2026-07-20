@@ -41,7 +41,10 @@ public class ConnectUI : MonoBehaviour
         // Once running, offer only a way out — the address is locked in by then.
         if (Started)
         {
-            if (GUI.Button(new Rect(12, 12, 140, 30), "Leave match", button)) LeaveMatch();
+            // Hidden while paused: the menu has its own Leave button, and one fewer thing
+            // drawing over the pause overlay is one fewer chance of a draw-order fight.
+            if (!GameMenu.IsPaused && GUI.Button(new Rect(12, 12, 140, 30), "Leave match", button))
+                LeaveMatch();
             return;
         }
 

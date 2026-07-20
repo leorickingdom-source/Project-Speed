@@ -60,7 +60,7 @@ public class SpeedHud : MonoBehaviour
 
     void OnGUI()
     {
-        if (motor == null) return;
+        if (motor == null || GameMenu.IsPaused) return;
         if (big == null)
         {
             big = new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold };

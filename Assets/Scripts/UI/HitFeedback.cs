@@ -140,6 +140,8 @@ public class HitFeedback : MonoBehaviour
 
     void OnGUI()
     {
+        if (GameMenu.IsPaused) return;
+
         DrawDamageDirection();
 
         if (Time.time > markerUntil) return;

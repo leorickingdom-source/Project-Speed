@@ -20,6 +20,12 @@ public class GameMenu : MonoBehaviour
 
     bool showControls = true; // visible on launch
     bool paused;
+
+    // Read by the HUD components so they can stand down while the menu is up. Unity draws
+    // OnGUI in script execution order, which is not guaranteed stable frame to frame, so a
+    // fullscreen pause overlay competing with six other OnGUI drawers produces intermittent
+    // flicker. Suppressing the HUD removes the contest rather than trying to order it.
+    public static bool IsPaused { get; private set; }
     GUIStyle panel, header, row, hint;
 
     void Awake() => GameSettings.Load();
@@ -73,6 +79,7 @@ public class GameMenu : MonoBehaviour
         // hit the disk dozens of times a second.
         if (paused && !p) GameSettings.Save();
         paused = p;
+        IsPaused = p;
         Time.timeScale = p ? 0f : 1f;
         Cursor.lockState = p ? CursorLockMode.None : CursorLockMode.Locked;
         Cursor.visible = p;
@@ -90,6 +97,9 @@ public class GameMenu : MonoBehaviour
 
     void OnGUI()
     {
+        // Negative depth draws last, i.e. on top. Belt and braces alongside the HUD standing
+        // down: whatever else is drawing, the menu is above it.
+        GUI.depth = -100;
         EnsureStyles();
 
         // Nothing until you are actually in a match. The connect screen owns the display
