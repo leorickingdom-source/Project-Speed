@@ -56,10 +56,24 @@ public class ConnectUI : MonoBehaviour
         for (int i = 0; i < LoadoutChoice.Names.Length; i++)
         {
             bool on = LoadoutChoice.WeaponIndex == i;
-            var s = on ? selected : button;
-            if (GUI.Button(new Rect(12 + i * 92, 138, 88, 30), LoadoutChoice.Names[i], s))
+            if (GUI.Button(new Rect(12 + i * 92, 138, 88, 30), LoadoutChoice.Names[i],
+                    on ? selected : button))
                 LoadoutChoice.WeaponIndex = i;
         }
+
+        GUI.Label(new Rect(12, 180, 400, 24), "Passive (locked for the match)", label);
+        var opts = PassiveChoice.Options;
+        for (int i = 0; i < opts.Length; i++)
+        {
+            bool on = PassiveChoice.Selected == opts[i];
+            float bx = 12 + (i % 4) * 118, by = 206 + (i / 4) * 34;
+            if (GUI.Button(new Rect(bx, by, 114, 30), opts[i].ToString(), on ? selected : button))
+                PassiveChoice.Selected = opts[i];
+        }
+
+        // Description of the current pick, so the choice can be made without reading code.
+        GUI.Label(new Rect(12, 280, Screen.width - 40f, 24),
+            PassiveChoice.Describe(PassiveChoice.Selected), label);
 
         // Host = server + local client, the normal way one player hosts for others.
         if (GUI.Button(new Rect(12, 72, 100, 32), "Host", button))

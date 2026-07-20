@@ -105,6 +105,9 @@ public class PlayerNetwork : TickNetworkBehaviour
             // and remote players never render your tracers anyway.
             var wc = GetComponent<WeaponController>();
             if (wc != null) wc.SetLockedWeapon(LoadoutChoice.WeaponIndex);
+            // The F1-F7 runtime picker is an offline testing tool. Both loadouts are locked
+            // once networked, and leaving it visible would suggest otherwise.
+            DisableIfPresent(GetComponent<PassivePicker>());
             return;
         }
 
