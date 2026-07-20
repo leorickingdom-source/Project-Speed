@@ -88,6 +88,17 @@ public class PlayerNetwork : TickNetworkBehaviour
     public override void OnStartClient()
     {
         base.OnStartClient();
+
+        // The body capsule spans the whole player, so it encloses the first-person camera.
+        // Hide it for the owner (you never see your own body) and show it for everyone else —
+        // without this, remote players render nothing at all and appear invisible.
+        var body = transform.Find("Body");
+        if (body != null)
+        {
+            var rend = body.GetComponent<Renderer>();
+            if (rend != null) rend.enabled = !IsOwner;
+        }
+
         if (IsOwner) return;
 
         DisableIfPresent(GetComponent<InputReader>());
