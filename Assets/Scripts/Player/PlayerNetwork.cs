@@ -96,7 +96,16 @@ public class PlayerNetwork : TickNetworkBehaviour
         if (body != null)
         {
             var rend = body.GetComponent<Renderer>();
-            if (rend != null) rend.enabled = !IsOwner;
+            if (rend != null)
+            {
+                rend.enabled = !IsOwner;
+                // Colour by OwnerId, which FishNet assigns and syncs — so every client derives
+                // the same colour for the same player with no extra networking.
+                var c = PlayerColors.For(OwnerId);
+                var m = rend.material;              // instance, per player
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+                m.color = c;
+            }
         }
 
         if (IsOwner)

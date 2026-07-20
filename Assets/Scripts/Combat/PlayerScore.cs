@@ -16,8 +16,10 @@ public class PlayerScore : NetworkBehaviour
     public int Kills => kills.Value;
     public int Deaths => deaths.Value;
 
-    // Stable, readable label. ClientId is assigned by the server so it agrees everywhere.
-    public string Label => $"Player {OwnerId}";
+    // Named by colour so the scoreboard matches what you actually see in the arena —
+    // "Red 3/1" is legible mid-match in a way that "Player 0" is not.
+    public string Label => PlayerColors.NameFor(OwnerId);
+    public Color Tint => PlayerColors.For(OwnerId);
 
     [Header("Scoreboard")]
     public bool showScoreboard = true;
@@ -68,8 +70,11 @@ public class PlayerScore : NetworkBehaviour
         foreach (var p in all)
         {
             if (p == null) continue;
+            // Row is drawn in that player's own colour, so the scoreboard and the arena agree.
+            var row = new GUIStyle(p.IsOwner ? mine : style);
+            row.normal.textColor = p.Tint;
             GUI.Label(new Rect(x, y, 200f, 20f),
-                $"{p.Label}   {p.Kills} / {p.Deaths}", p.IsOwner ? mine : style);
+                $"{(p.IsOwner ? "> " : "")}{p.Label}   {p.Kills} / {p.Deaths}", row);
             y += 20f;
         }
     }

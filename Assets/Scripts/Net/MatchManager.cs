@@ -64,7 +64,9 @@ public class MatchManager : NetworkBehaviour
         }
 
         float w = 600f, cx = (Screen.width - w) * 0.5f, cy = Screen.height * 0.32f;
-        GUI.Label(new Rect(cx, cy, w, 56f), $"PLAYER {winnerId.Value} WINS", banner);
+        var win = new GUIStyle(banner);
+        win.normal.textColor = PlayerColors.For(winnerId.Value);
+        GUI.Label(new Rect(cx, cy, w, 56f), $"{PlayerColors.NameFor(winnerId.Value)} WINS", win);
         GUI.Label(new Rect(cx, cy + 58f, w, 26f), "next round starting...", sub);
     }
 }
