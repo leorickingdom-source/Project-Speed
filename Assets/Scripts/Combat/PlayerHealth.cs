@@ -64,6 +64,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     PlayerMotor motor;
     PassiveLoadout passives;
+    FishNet.Component.Spawning.PlayerSpawner spawner; // spawn point source, found lazily
     Vector3 spawnPos;
     Quaternion spawnRot;
     float invulnUntil;
@@ -147,9 +148,46 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     void Respawn()
     {
-        transform.SetPositionAndRotation(spawnPos, spawnRot);
+        PickSpawn(out Vector3 pos, out Quaternion rot);
+        transform.SetPositionAndRotation(pos, rot);
         hp.Value = MaxHp; // drives ApplyAliveState everywhere through OnChange
         invulnUntil = Time.time + spawnInvuln;
+    }
+
+    // Re-picks a spawn each death rather than reusing the one cached at Awake. A fixed
+    // respawn point is trivially camped: kill someone and you already know where they will
+    // reappear. Chooses the point FURTHEST from the nearest living opponent, which is the
+    // standard anti-camp rule and needs no extra state.
+    void PickSpawn(out Vector3 pos, out Quaternion rot)
+    {
+        pos = spawnPos;
+        rot = spawnRot;
+
+        if (spawner == null) spawner = FindAnyObjectByType<FishNet.Component.Spawning.PlayerSpawner>();
+        var points = spawner != null ? spawner.Spawns : null;
+        if (points == null || points.Length == 0) return;
+
+        // Everyone else still alive. Dead players are ignored — they are about to move anyway.
+        var others = FindObjectsByType<PlayerHealth>(FindObjectsSortMode.None);
+
+        float bestScore = float.MinValue;
+        foreach (var t in points)
+        {
+            if (t == null) continue;
+            float nearest = float.MaxValue;
+            foreach (var o in others)
+            {
+                if (o == null || o == this || !o.Alive) continue;
+                nearest = Mathf.Min(nearest, Vector3.Distance(t.position, o.transform.position));
+            }
+            // No living opponents: every point scores equally, so the first wins — fine.
+            if (nearest > bestScore)
+            {
+                bestScore = nearest;
+                pos = t.position;
+                rot = t.rotation;
+            }
+        }
     }
 
     void ApplyDeadState()
