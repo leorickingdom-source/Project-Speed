@@ -79,6 +79,17 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     // "who killed you" RPC would be the same fact travelling twice.
     Vector3 lastAttackerPos;
     float lastAttackerAt = -999f;
+    string lastAttackerName;
+
+    // The SERVER's own record of who last hurt this player. Separate from the client-side one
+    // above because they answer different questions from different machines: that one aims the
+    // local death camera, this one decides what the kill feed says. The server cannot read the
+    // client's copy, and the client must not be trusted to report its own killer.
+    FishNet.Object.NetworkObject serverAttacker;
+    float serverAttackerAt = -999f;
+
+    // Name of whoever last hit us, for the death screen. Null when nobody did.
+    public string LastAttackerName => HasFreshAttacker ? lastAttackerName : null;
 
     [Tooltip("How long a recorded attacker stays valid for the death camera. Past this the " +
              "death was probably a pit fall or someone else entirely, and pointing the camera " +
@@ -94,10 +105,19 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public float RespawnCountdown => Alive ? 0f : Mathf.Max(0f, localRespawnAt - Time.time);
 
     // Called on the victim's own client from the damage report.
-    public void RecordAttacker(Vector3 worldPos)
+    public void RecordAttacker(Vector3 worldPos, string attackerName)
     {
         lastAttackerPos = worldPos;
+        lastAttackerName = attackerName;
         lastAttackerAt = Time.time;
+    }
+
+    // Called on the SERVER from PlayerNetwork.ReportHit, before the damage lands, so that Die
+    // can name a killer without every damage path having to remember to announce one.
+    public void RecordServerAttacker(FishNet.Object.NetworkObject attacker)
+    {
+        serverAttacker = attacker;
+        serverAttackerAt = Time.time;
     }
 
     bool HasFreshAttacker => Time.time - lastAttackerAt <= attackerMemory;
@@ -179,6 +199,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // out-of-bounds — are recorded too. Runs under authority; Die() is authority-only.
         var score = GetComponent<PlayerScore>();
         if (score != null) score.AddDeath();
+
+        // The single announce site. Every death funnels through here, so the feed cannot miss
+        // one and cannot double-report it. A stale attacker resolves to null rather than being
+        // credited: falling into the pit a few seconds after a firefight is not that player's
+        // kill, and the feed saying otherwise would be worse than saying nothing.
+        var killer = (Time.time - serverAttackerAt <= attackerMemory) ? serverAttacker : null;
+        KillFeed.Announce(killer, NetworkObject);
+        serverAttacker = null;
+        serverAttackerAt = -999f;
+
         ApplyDeadState();
     }
 

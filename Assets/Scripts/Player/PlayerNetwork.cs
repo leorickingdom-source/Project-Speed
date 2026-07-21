@@ -198,13 +198,16 @@ public class PlayerNetwork : TickNetworkBehaviour
         }
 
         bool wasAlive = hp.Alive;
+        // Recorded BEFORE the damage lands, so if this hit kills them PlayerHealth.Die already
+        // knows who to credit. Die is the one place the kill feed is announced from.
+        hp.RecordServerAttacker(base.NetworkObject);
         hp.Damage(damage);
 
         // Point the victim back at us. Sent from the victim's own PlayerNetwork so the TargetRpc
         // reaches their client, with our position as the source.
         var victimNet = victim.GetComponent<PlayerNetwork>();
         if (victimNet != null && victim.Owner != null)
-            victimNet.ShowDamageFrom(victim.Owner, transform.position);
+            victimNet.ShowDamageFrom(victim.Owner, transform.position, base.NetworkObject);
 
         // Only the server knows whether that killed them — health is server-owned — so the
         // kill cue has to come back to the shooter rather than being guessed locally.
@@ -234,7 +237,14 @@ public class PlayerNetwork : TickNetworkBehaviour
 
         target.Damage(damage);
 
-        if (wasAlive && botHealth != null && !botHealth.Alive) ConfirmKill(Owner);
+        if (wasAlive && botHealth != null && !botHealth.Alive)
+        {
+            ConfirmKill(Owner);
+            // Bots die through Health, not PlayerHealth, so they never reach the announce site
+            // in PlayerHealth.Die. Announced here instead — a practice session against bots is
+            // exactly where a feed earns its keep.
+            KillFeed.Announce(base.NetworkObject, victim);
+        }
     }
 
     // Gunfire is the one sound that cannot be derived locally: WeaponController is disabled on
@@ -274,7 +284,8 @@ public class PlayerNetwork : TickNetworkBehaviour
     // Tells the VICTIM which direction the shot came from. Being hit with no idea where from
     // is the worst case in a fast game — you cannot even choose which way to break.
     [FishNet.Object.TargetRpc]
-    void ShowDamageFrom(FishNet.Connection.NetworkConnection conn, Vector3 worldPos)
+    void ShowDamageFrom(FishNet.Connection.NetworkConnection conn, Vector3 worldPos,
+        FishNet.Object.NetworkObject attacker)
     {
         var fb = GetComponent<HitFeedback>();
         if (fb != null) fb.ShowDamageFrom(worldPos);
@@ -282,8 +293,20 @@ public class PlayerNetwork : TickNetworkBehaviour
         // Same message, second consumer: the death camera needs to know who to turn towards,
         // and this already carries exactly that. A separate "you were killed by" RPC would be
         // the same fact crossing the wire twice.
+        //
+        // The attacker reference rides along so the death screen can NAME them. Resolved here
+        // rather than sent as a string: the name already lives on their PlayerIdentity, and a
+        // copied string would go stale the moment they renamed.
         var hp = GetComponent<PlayerHealth>();
-        if (hp != null) hp.RecordAttacker(worldPos);
+        if (hp == null) return;
+
+        string attackerName = null;
+        if (attacker != null)
+        {
+            var id = attacker.GetComponent<PlayerIdentity>();
+            attackerName = id != null ? id.Name : attacker.gameObject.name;
+        }
+        hp.RecordAttacker(worldPos, attackerName);
     }
 
     [FishNet.Object.TargetRpc]

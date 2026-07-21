@@ -279,6 +279,19 @@ public class SpeedHud : MonoBehaviour
         number.normal.textColor = new Color(1f, 0.85f, 0.4f);
 
         float cy = sh * 0.34f;
+
+        // Who did it. The death camera already SWINGS to face them, but a coloured capsule at
+        // 30m is not an identity — without the name the one thing you most want to know at the
+        // moment of dying is the one thing the screen does not say. Absent for a pit fall or
+        // out-of-bounds, where there genuinely is no killer to name.
+        string killer = health.LastAttackerName;
+        if (!string.IsNullOrEmpty(killer))
+        {
+            var by = new GUIStyle(big) { fontSize = 22, alignment = TextAnchor.MiddleCenter };
+            by.normal.textColor = new Color(1f, 0.5f, 0.45f);
+            GUI.Label(new Rect(0f, cy - 34f, sw, 28f), $"killed by {killer}", by);
+        }
+
         GUI.Label(new Rect(0f, cy, sw, 26f), "RESPAWNING IN", title);
         // One decimal at the end so the last stretch visibly counts rather than sitting on "1".
         string text = left <= countdownPreciseUnder ? $"{left:0.0}" : $"{Mathf.CeilToInt(left)}";

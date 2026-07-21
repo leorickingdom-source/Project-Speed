@@ -242,6 +242,7 @@ GameObject:
   - component: {fileID: 126291856}
   - component: {fileID: 126291855}
   - component: {fileID: 126291854}
+  - component: {fileID: 126291857}
   m_Layer: 0
   m_Name: MatchManager
   m_TagString: Untagged
@@ -338,6 +339,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &126291857
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 126291853}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d62364502e9a614eaee43c0e986a8d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::KillFeed
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 126291855}
+  _networkObjectCache: {fileID: 0}
+  maxEntries: 5
+  entryLifetime: 6
+  fontSize: 14
+  topMargin: 12
+  rightMargin: 12
+  rowHeight: 20
 --- !u!1 &146040673
 GameObject:
   m_ObjectHideFlags: 0
