@@ -30,6 +30,7 @@ public class PlayerScore : NetworkBehaviour
     public Color Tint => PlayerColors.For(OwnerId);
 
     PlayerIdentity identity;
+    MatchManager match;
 
     [Header("Scoreboard")]
     public bool showScoreboard = true;
@@ -60,7 +61,12 @@ public class PlayerScore : NetworkBehaviour
     void OnGUI()
     {
         // Only the local player draws it, or every player in the scene would stack a copy.
-        if (!showScoreboard || !IsOwner || GameMenu.IsPaused) return;
+        if (!showScoreboard || !IsOwner || GameMenu.IsPaused || KeybindsUI.Open) return;
+
+        // Stands down while the round is over: MatchManager puts a full final scoreboard on
+        // screen, and two scoreboards saying the same thing in different corners is noise.
+        if (match == null) match = FindAnyObjectByType<MatchManager>();
+        if (match != null && match.MatchOver) return;
 
         if (style == null)
         {

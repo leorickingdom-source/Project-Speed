@@ -1926,9 +1926,13 @@ MonoBehaviour:
   kind: 0
   amount: 50
   respawnSeconds: 20
-  tintByKind: 1
+  styleByKind: 1
   healthColor: {r: 0.35, g: 0.95, b: 0.45, a: 1}
   armourColor: {r: 0.4, g: 0.7, b: 1, a: 1}
+  armourScale: 1.35
+  armourTilt: 35
+  volume: 0.55
+  audioRange: 34
   radius: 1.6
   bobHeight: 0.25
   bobSpeed: 2
@@ -2231,9 +2235,13 @@ MonoBehaviour:
   kind: 1
   amount: 50
   respawnSeconds: 25
-  tintByKind: 1
+  styleByKind: 1
   healthColor: {r: 0.35, g: 0.95, b: 0.45, a: 1}
   armourColor: {r: 0.4, g: 0.7, b: 1, a: 1}
+  armourScale: 1.35
+  armourTilt: 35
+  volume: 0.55
+  audioRange: 34
   radius: 1.6
   bobHeight: 0.25
   bobSpeed: 2
@@ -2351,7 +2359,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 819329271}
-  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!4 &819329276
 Transform:
   m_ObjectHideFlags: 0
@@ -2360,7 +2368,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 819329271}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.28678823, y: -0.09042398, z: 0.28678823, w: 0.90957606}
   m_LocalPosition: {x: -13, y: 1.2, z: 0}
   m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
@@ -2688,6 +2696,7 @@ MonoBehaviour:
   fireCooldown: 1.6
   projectileSpeed: 20
   projectileDamage: 12
+  maxAimErrorDegrees: 7
   sightMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -3698,9 +3707,13 @@ MonoBehaviour:
   kind: 1
   amount: 50
   respawnSeconds: 25
-  tintByKind: 1
+  styleByKind: 1
   healthColor: {r: 0.35, g: 0.95, b: 0.45, a: 1}
   armourColor: {r: 0.4, g: 0.7, b: 1, a: 1}
+  armourScale: 1.35
+  armourTilt: 35
+  volume: 0.55
+  audioRange: 34
   radius: 1.6
   bobHeight: 0.25
   bobSpeed: 2
@@ -3818,7 +3831,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1288290997}
-  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!4 &1288291002
 Transform:
   m_ObjectHideFlags: 0
@@ -3827,7 +3840,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1288290997}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.28678823, y: -0.09042398, z: 0.28678823, w: 0.90957606}
   m_LocalPosition: {x: 13, y: 1.2, z: 0}
   m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
@@ -4320,9 +4333,13 @@ MonoBehaviour:
   kind: 0
   amount: 50
   respawnSeconds: 20
-  tintByKind: 1
+  styleByKind: 1
   healthColor: {r: 0.35, g: 0.95, b: 0.45, a: 1}
   armourColor: {r: 0.4, g: 0.7, b: 1, a: 1}
+  armourScale: 1.35
+  armourTilt: 35
+  volume: 0.55
+  audioRange: 34
   radius: 1.6
   bobHeight: 0.25
   bobSpeed: 2
@@ -4873,6 +4890,7 @@ MonoBehaviour:
   fireCooldown: 1.6
   projectileSpeed: 20
   projectileDamage: 12
+  maxAimErrorDegrees: 7
   sightMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -6049,6 +6067,7 @@ MonoBehaviour:
   fireCooldown: 1.6
   projectileSpeed: 20
   projectileDamage: 12
+  maxAimErrorDegrees: 7
   sightMask:
     serializedVersion: 2
     m_Bits: 4294967295

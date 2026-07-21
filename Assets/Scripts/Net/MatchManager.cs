@@ -42,7 +42,22 @@ public class MatchManager : NetworkBehaviour
     }
 
     float resetAt;
+
+    // Client-side copy of the same clock. resetAt is only ever written by the server, so a
+    // client reading it would count down from zero. postMatchSeconds is identical everywhere,
+    // so starting a local timer the moment the winner syncs is correct to within one trip.
+    float localResetAt;
+
     GUIStyle banner, sub;
+
+    void Awake() => winnerId.OnChange += OnWinnerChanged;
+
+    void OnDestroy() => winnerId.OnChange -= OnWinnerChanged;
+
+    void OnWinnerChanged(int prev, int next, bool asServer)
+    {
+        if (next >= 0) localResetAt = Time.time + postMatchSeconds;
+    }
 
     // Called by the server after a kill is credited. Checks whether that ended the round.
     public void CheckForWinner()
@@ -83,11 +98,68 @@ public class MatchManager : NetworkBehaviour
             sub.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
         }
 
-        float w = 600f, cx = (Screen.width - w) * 0.5f, cy = Screen.height * 0.32f;
+        float w = 600f, cx = (Screen.width - w) * 0.5f, cy = Screen.height * 0.22f;
         var win = new GUIStyle(banner);
         win.normal.textColor = PlayerColors.For(winnerId.Value);
-        GUI.Label(new Rect(cx, cy, w, 56f), $"{WinnerName()} WINS", win);
-        GUI.Label(new Rect(cx, cy + 58f, w, 26f), "next round starting...", sub);
+        GUI.Label(new Rect(cx, cy, w, 62f), $"{WinnerName()} WINS", win);
+
+        DrawFinalScores(cx, cy + 74f, w);
+
+        float left = Mathf.Max(0f, localResetAt - Time.time);
+        GUI.Label(new Rect(cx, cy + 74f + FinalScoresHeight() + 12f, w, 30f),
+            $"next round in {Mathf.CeilToInt(left)}...", sub);
+    }
+
+    float FinalScoresHeight()
+    {
+        int rows = FindObjectsByType<PlayerScore>(FindObjectsSortMode.None).Length;
+        return 36f + rows * 32f;
+    }
+
+    // The round ends and the scores vanish a moment later. Without this the only record of how
+    // it actually went is a banner naming one player — you never see whether you were second by
+    // a kill or last by ten, which is most of what makes a short round worth replaying.
+    void DrawFinalScores(float x, float y, float w)
+    {
+        var all = FindObjectsByType<PlayerScore>(FindObjectsSortMode.None);
+        if (all.Length == 0) return;
+        System.Array.Sort(all, (a, b) => b.Kills.CompareTo(a.Kills));
+
+        GUI.color = new Color(0f, 0f, 0f, 0.55f);
+        GUI.DrawTexture(new Rect(x, y, w, FinalScoresHeight()), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+
+        var head = new GUIStyle(sub) { alignment = TextAnchor.MiddleLeft, fontSize = 16 };
+        head.normal.textColor = new Color(1f, 1f, 1f, 0.55f);
+        GUI.Label(new Rect(x + 20f, y + 6f, w * 0.6f, 26f), "PLAYER", head);
+        GUI.Label(new Rect(x + w - 220f, y + 6f, 90f, 26f), "KILLS", head);
+        GUI.Label(new Rect(x + w - 120f, y + 6f, 90f, 26f), "DEATHS", head);
+
+        float ry = y + 34f;
+        for (int i = 0; i < all.Length; i++)
+        {
+            var p = all[i];
+            if (p == null) continue;
+
+            var name = new GUIStyle(sub)
+            { alignment = TextAnchor.MiddleLeft, fontSize = 20, fontStyle = FontStyle.Bold };
+            name.normal.textColor = p.Tint;
+            var num = new GUIStyle(name) { alignment = TextAnchor.MiddleLeft };
+
+            // The winner's row is lit rather than just first, so the result reads without
+            // having to compare two numbers.
+            if (p.OwnerId == winnerId.Value)
+            {
+                GUI.color = new Color(1f, 0.9f, 0.4f, 0.14f);
+                GUI.DrawTexture(new Rect(x + 8f, ry - 2f, w - 16f, 30f), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+            }
+
+            GUI.Label(new Rect(x + 20f, ry, w * 0.6f, 28f), $"{i + 1}.  {p.Label}", name);
+            GUI.Label(new Rect(x + w - 220f, ry, 90f, 28f), p.Kills.ToString(), num);
+            GUI.Label(new Rect(x + w - 120f, ry, 90f, 28f), p.Deaths.ToString(), num);
+            ry += 32f;
+        }
     }
 
     // winnerId is an OwnerId, not a name — the name lives on that player's PlayerIdentity, so
