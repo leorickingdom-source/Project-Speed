@@ -33,6 +33,9 @@ public class SimpleBot : NetworkBehaviour
     public float fireCooldown = 1.6f;
     public float projectileSpeed = 20f;
     public float projectileDamage = 12f;
+    [Tooltip("Cone the bot's aim is randomised within at the LOWEST difficulty, shrinking to " +
+             "zero at full. Its shots are otherwise perfectly aimed at the moment of firing.")]
+    public float maxAimErrorDegrees = 7f;
     public LayerMask sightMask = ~0;
 
     [Header("Targeting")]
@@ -60,6 +63,17 @@ public class SimpleBot : NetworkBehaviour
         {
             if (match == null) match = FindAnyObjectByType<MatchManager>();
             return match != null ? match.BotCount : BotChoice.Count;
+        }
+    }
+
+    // Damage and rate-of-fire scalar, host-decided and synced alongside the count. Read live
+    // rather than cached in Awake so it stays correct if the value ever changes mid-match.
+    float Difficulty
+    {
+        get
+        {
+            if (match == null) match = FindAnyObjectByType<MatchManager>();
+            return Mathf.Clamp(match != null ? match.BotDifficulty : BotChoice.Difficulty, 0.05f, 1f);
         }
     }
 
@@ -95,11 +109,15 @@ public class SimpleBot : NetworkBehaviour
                 Quaternion.LookRotation(dir), turnSpeed * Time.deltaTime);
         }
 
-        // Contact damage: gnaw the player while touching.
+        float diff = Difficulty;
+
+        // Contact damage: gnaw the player while touching. Scaled hardest by difficulty because
+        // it is CONTINUOUS — three bots touching at once is the single biggest source of death,
+        // and it is the one a player cannot react to, only walk out of.
         if (dist <= touchRange)
         {
             var hp = target.GetComponent<IDamageable>();
-            if (hp != null) hp.Damage(damagePerSec * Time.deltaTime);
+            if (hp != null) hp.Damage(damagePerSec * diff * Time.deltaTime);
         }
 
         // Ranged: lob a dodgeable projectile when it can see you. No lead, so you can
@@ -111,7 +129,22 @@ public class SimpleBot : NetworkBehaviour
             if (CanSee(muzzle, aim))
             {
                 Vector3 dir = (aim - muzzle).normalized;
-                nextFire = Time.time + fireCooldown;
+
+                // Aim error, widening as difficulty drops. Without it the shot is pixel-perfect
+                // at the moment of firing, so the projectile is only "dodgeable" by moving AFTER
+                // it is already travelling — a bot that never misses is not easier to read, it
+                // just kills you more slowly.
+                float errorDeg = Mathf.Lerp(maxAimErrorDegrees, 0f, diff);
+                if (errorDeg > 0.01f)
+                {
+                    Vector2 off = Random.insideUnitCircle * Mathf.Tan(errorDeg * Mathf.Deg2Rad);
+                    Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
+                    Vector3 up = Vector3.Cross(dir, right);
+                    dir = (dir + right * off.x + up * off.y).normalized;
+                }
+
+                // Slower cadence at lower difficulty, so the gap between shots is a real window.
+                nextFire = Time.time + fireCooldown / diff;
 
                 if (IsSpawned) BroadcastShot(muzzle, dir);
                 else FireProjectile(muzzle, dir);
@@ -169,6 +202,6 @@ public class SimpleBot : NetworkBehaviour
         rend.material.color = c;
         var proj = go.AddComponent<Projectile>();
         proj.speed = projectileSpeed;
-        proj.Launch(dir, projectileDamage, ~0, gameObject);
+        proj.Launch(dir, projectileDamage * Difficulty, ~0, gameObject);
     }
 }

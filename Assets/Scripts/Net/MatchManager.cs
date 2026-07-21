@@ -26,16 +26,19 @@ public class MatchManager : NetworkBehaviour
     // Bot count, same deal: the host decides, everyone agrees. SimpleBot reads this to know
     // whether its slot is in play.
     readonly SyncVar<int> botCount = new SyncVar<int>(0);
+    readonly SyncVar<float> botDifficulty = new SyncVar<float>(BotChoice.Practice);
 
     public bool MatchOver => winnerId.Value >= 0;
     public bool PickupsEnabled => pickupsEnabled.Value;
     public int BotCount => botCount.Value;
+    public float BotDifficulty => botDifficulty.Value;
 
     public override void OnStartServer()
     {
         base.OnStartServer();
         pickupsEnabled.Value = GameModeChoice.Pickups; // the host's connect-screen choice
         botCount.Value = Mathf.Clamp(BotChoice.Count, 0, BotChoice.Max);
+        botDifficulty.Value = Mathf.Clamp(BotChoice.Difficulty, 0.05f, 1f);
     }
 
     float resetAt;
