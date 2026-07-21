@@ -32,6 +32,17 @@ public class SpeedHud : MonoBehaviour
              "walls are a wallhack you shipped on purpose.")]
     public LayerMask nameplateBlockMask = ~0;
 
+    [Header("Ping")]
+    [Tooltip("Show round-trip time to the server. Worth having permanently visible while the " +
+             "group plays through a relay, because the tunnel's cost is the main thing you " +
+             "cannot judge from inside the game otherwise.")]
+    public bool showPing = true;
+    [Tooltip("Green below this. Under a tick and a half at 100Hz still feels direct.")]
+    public float pingGood = 60f;
+    [Tooltip("Amber below this, red above. Past here you are visibly shooting at where someone " +
+             "WAS, which in a game this fast is the point it starts costing you fights.")]
+    public float pingBad = 120f;
+
     [Header("Respawn")]
     [Tooltip("Seconds of countdown below which it switches to one decimal, so the last second " +
              "reads as a countdown rather than a static '1'.")]
@@ -69,6 +80,10 @@ public class SpeedHud : MonoBehaviour
     Camera view;
     GUIStyle plateStyle;
 
+    // Smoothed, because raw RTT jitters by tens of milliseconds between samples and a number
+    // that flickers is one nobody reads. -1 means "no sample yet".
+    float shownPing = -1f;
+
     void Awake()
     {
         if (motor == null) motor = GetComponent<PlayerMotor>();
@@ -87,6 +102,37 @@ public class SpeedHud : MonoBehaviour
         if (KeybindsUI.Open) return; // a key pressed while rebinding is a binding, not a command
         if (Keybinds.Pressed(GameAction.ToggleDebug)) showDebug = !showDebug;
         RefreshNameplates();
+        RefreshPing();
+    }
+
+    void RefreshPing()
+    {
+        if (!showPing || !FishNet.InstanceFinder.IsClientStarted)
+        {
+            shownPing = -1f;
+            return;
+        }
+
+        var tm = FishNet.InstanceFinder.TimeManager;
+        if (tm == null) { shownPing = -1f; return; }
+
+        float rtt = tm.RoundTripTime;
+        // Snap on the first sample so it does not visibly climb from zero on connect.
+        shownPing = shownPing < 0f ? rtt : Mathf.Lerp(shownPing, rtt, 1f - Mathf.Exp(-4f * Time.unscaledDeltaTime));
+    }
+
+    void DrawPing()
+    {
+        if (shownPing < 0f) return;
+
+        Color c = shownPing <= pingGood ? new Color(0.45f, 0.95f, 0.5f)
+                : shownPing <= pingBad ? new Color(1f, 0.82f, 0.35f)
+                : new Color(1f, 0.45f, 0.4f);
+
+        var style = new GUIStyle(small) { fontStyle = FontStyle.Bold };
+        style.normal.textColor = c;
+        // Under the Leave match button, which owns the very top-left corner.
+        GUI.Label(new Rect(14f, 48f, 200f, 24f), $"{shownPing:0} ms", style);
     }
 
     void RefreshNameplates()
@@ -253,6 +299,7 @@ public class SpeedHud : MonoBehaviour
 
         DrawMobilityPerk(barX, barY);
         DrawNameplates();
+        DrawPing();
 
         // Crosshair, but not while dead: the death camera is third person, so a centre dot
         // would sit in mid-air pointing at nothing and imply you can still shoot.
