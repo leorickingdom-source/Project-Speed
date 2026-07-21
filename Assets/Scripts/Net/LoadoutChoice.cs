@@ -19,7 +19,7 @@ public static class LoadoutChoice
     {
         switch (i)
         {
-            case 0: return "Revolver - 6 rounds, 3-shot kill, no falloff at any range. Miss and you feel it.";
+            case 0: return "Revolver - 6 rounds, 3-shot kill to 40m, tapers past that. Miss and you feel it.";
             case 1: return "Rifle - all-rounder. Full damage to 45m, tapers to 70% at 90m.";
             case 2: return "Sniper - only 40% damage under 10m, full past 25m. Deadly at range, helpless if rushed.";
             case 3: return "SMG - close-mid pressure. Full to 20m, down to 40% by 45m.";

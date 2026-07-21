@@ -30,7 +30,16 @@ public class DamageDummy : MonoBehaviour, IDamageable
     void Awake()
     {
         rend = GetComponent<Renderer>();
-        if (rend != null) mpb = new MaterialPropertyBlock();
+        EnsureBlock();
+    }
+
+    // A MaterialPropertyBlock is a plain C# object, so Unity does not serialize it across a
+    // DOMAIN RELOAD — which is what a script recompile during play mode causes. The Renderer
+    // reference survives (it is a UnityEngine.Object) but this does not, so a null check on
+    // `rend` alone is not enough: after a hot recompile the guard passes and the block is null.
+    void EnsureBlock()
+    {
+        if (rend != null && mpb == null) mpb = new MaterialPropertyBlock();
     }
 
     public void Damage(float amount)
@@ -45,7 +54,8 @@ public class DamageDummy : MonoBehaviour, IDamageable
     void Update()
     {
         // Flash red on hit, ease back to idle.
-        if (rend != null)
+        EnsureBlock();
+        if (rend != null && mpb != null)
         {
             float t = Mathf.Clamp01((Time.time - lastHitTime) / 0.12f);
             mpb.SetColor("_BaseColor", Color.Lerp(hitFlash, idleColor, t));

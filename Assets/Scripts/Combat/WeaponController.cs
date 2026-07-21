@@ -172,17 +172,19 @@ public class WeaponController : MonoBehaviour
         // pushed it to a 3.08s kill, the slowest in the game. The fix was never more damage per
         // second — it was giving it a reason to exist.
         //
-        // Keeps zero falloff, which is now the point rather than a consolation: it is the only
-        // weapon in the loadout that hits exactly as hard at 90m as at 2m. That makes it a real
-        // long-range threat for someone accurate WITHOUT stepping on the Sniper, which still
-        // needs fewer shots at range and still gets punished under 10m. The Revolver trades
-        // the Sniper's raw efficiency for never having a bad distance.
+        // Falloff added after playtest: zero falloff made it a BETTER SNIPER THAN THE SNIPER.
+        // At 90m both are 0 spread and 100% hit, but the Revolver killed in 1.10s against the
+        // Sniper's 1.20s — and unlike the Sniper it is not punished under 10m, so it simply had
+        // no bad range. "Consistent" is a fine identity; "no weakness at any distance" is not.
+        // Full damage to 25m keeps it the most dependable gun at the ranges fights actually
+        // happen at, and the taper past that hands the long lane back to the Sniper.
         //
-        // Semi-auto on purpose (automatic = false -> one shot per click). Held-fire would let
-        // the cycle time do the aiming; a deliberate trigger pull is what makes landing three
-        // in a row on a bhopping target feel earned.
-        new Weapon { name = "Revolver", kind = FireKind.Hitscan, automatic = false, cycle = 0.55f,
+        // Automatic (hold to fire) rather than semi. At a 0.55s cycle this is comfort, not
+        // power: a human clicks far faster than 1.8 times a second, so the cycle was already
+        // doing the gating and the click was only ever making the player's hand do the work.
+        new Weapon { name = "Revolver", kind = FireKind.Hitscan, automatic = true, cycle = 0.55f,
                      damage = 65f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(1.00f, 0.72f, 0.40f),
+                     nearDistance = 25f, nearMultiplier = 1f, farDistance = 60f, farMultiplier = 0.55f,
                      magSize = 6, reloadTime = 1.4f },
         // Rifle: honest all-rounder, mild taper so it never dominates the sniper lane.
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
@@ -218,10 +220,19 @@ public class WeaponController : MonoBehaviour
                      nearDistance = 10f, nearMultiplier = 0.4f, farDistance = 25f, farMultiplier = 1f,
                      magSize = 5, reloadTime = 1.8f },
         // SMG: close-mid pressure, gutted at range so it cannot contest the lane.
+        //
+        // 45 rounds, not the 30 it shared with the Rifle. Identical magazines gave the SPRAY
+        // weapon worse ammo economy than the precision one: 17 shots a kill against the Rifle's
+        // 11 means 30 rounds bought 1.8 kills versus 2.7, and armour widened that to 1.07 versus
+        // 1.67 — one armoured kill consumed 28 of 30 rounds. A weapon whose whole premise is
+        // volume of fire cannot be the one that runs dry first.
+        // 45 also puts its held-fire duration (45 * 0.07 = 3.15s) level with the Rifle's 3.19s,
+        // so "how long can I hold the trigger" stops being the axis they differ on. What still
+        // separates them is range: spread alone drops the SMG to a 19% hit rate at 30m.
         new Weapon { name = "SMG",    kind = FireKind.Hitscan, automatic = true,  cycle = 0.07f,
                      damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
                      nearDistance = 20f, nearMultiplier = 1f, farDistance = 45f, farMultiplier = 0.4f,
-                     magSize = 30, reloadTime = 1.4f },
+                     magSize = 45, reloadTime = 1.4f },
         // Shotgun: brutal inside 8m, nearly harmless by 20m. Must close to matter.
         //
         // 13 per pellet (104 a shell), raised from 10, ENTIRELY to survive armour. Armour soaks
