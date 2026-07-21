@@ -13,8 +13,8 @@ public static class KeybindsUI
 {
     public static bool Open;
 
-    const float RowHeight = 26f;
-    const float PanelWidth = 540f;
+    const float RowHeight = 32f;
+    const float PanelWidth = 620f;
 
     static readonly GameAction[] Actions = (GameAction[])Enum.GetValues(typeof(GameAction));
 
@@ -141,7 +141,7 @@ public static class KeybindsUI
         capturing = false;
     }
 
-    public static float Height => 78f + Actions.Length * RowHeight + 84f;
+    public static float Height => 88f + Actions.Length * RowHeight + 92f;
 
     // Full-screen modal. Drawn by whichever screen is up; they are mutually exclusive (the
     // connect screen hides once a match starts, the pause menu only draws once one has), so
@@ -162,14 +162,14 @@ public static class KeybindsUI
 
         GUI.Box(new Rect(x, y, w, h), "CONTROLS", panel);
 
-        float rowY = y + 40f;
-        GUI.Label(new Rect(x + 16f, rowY, w - 32f, 20f),
+        float rowY = y + 48f;
+        GUI.Label(new Rect(x + 16f, rowY, w - 32f, 24f),
             capturing
                 ? "Press any key or mouse button   ·   [Backspace] unbind   ·   [Esc] cancel"
                 : "Click a binding to change it.", hint);
-        rowY += 26f;
+        rowY += 30f;
 
-        const float nameW = 220f, gap = 8f;
+        const float nameW = 260f, gap = 8f;
         float slotW = (w - 32f - nameW - gap * 2f) * 0.5f;
 
         foreach (var action in Actions)
@@ -196,7 +196,7 @@ public static class KeybindsUI
         }
 
         rowY += 10f;
-        if (!capturing && GUI.Button(new Rect(x + 16f, rowY, w - 32f, 30f),
+        if (!capturing && GUI.Button(new Rect(x + 16f, rowY, w - 32f, 34f),
                 "Reset controls to default"))
         {
             Keybinds.Reset();
@@ -204,12 +204,12 @@ public static class KeybindsUI
         }
         else if (capturing)
         {
-            GUI.Box(new Rect(x + 16f, rowY, w - 32f, 30f), "Reset controls to default", slotEmpty);
+            GUI.Box(new Rect(x + 16f, rowY, w - 32f, 34f), "Reset controls to default", slotEmpty);
         }
 
-        rowY += 36f;
-        if (!capturing && GUI.Button(new Rect(x + 16f, rowY, w - 32f, 32f), "Done")) Close();
-        else if (capturing) GUI.Box(new Rect(x + 16f, rowY, w - 32f, 32f), "Done", slotEmpty);
+        rowY += 40f;
+        if (!capturing && GUI.Button(new Rect(x + 16f, rowY, w - 32f, 36f), "Done")) Close();
+        else if (capturing) GUI.Box(new Rect(x + 16f, rowY, w - 32f, 36f), "Done", slotEmpty);
     }
 
     static void EnsureStyles()
@@ -219,13 +219,13 @@ public static class KeybindsUI
         {
             alignment = TextAnchor.UpperCenter,
             fontStyle = FontStyle.Bold,
-            fontSize = 15,
+            fontSize = 19,
         };
-        label = new GUIStyle(GUI.skin.label) { fontSize = 14 };
+        label = new GUIStyle(GUI.skin.label) { fontSize = 17 };
         label.normal.textColor = Color.white;
-        hint = new GUIStyle(GUI.skin.label) { fontSize = 12 };
+        hint = new GUIStyle(GUI.skin.label) { fontSize = 15 };
         hint.normal.textColor = new Color(1f, 1f, 1f, 0.6f);
-        slot = new GUIStyle(GUI.skin.button) { fontSize = 13 };
+        slot = new GUIStyle(GUI.skin.button) { fontSize = 16 };
         slotEmpty = new GUIStyle(slot);
         slotEmpty.normal.textColor = new Color(1f, 1f, 1f, 0.4f);
         slotCapturing = new GUIStyle(slot) { fontStyle = FontStyle.Bold };

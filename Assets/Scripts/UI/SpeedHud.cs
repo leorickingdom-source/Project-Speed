@@ -167,14 +167,14 @@ public class SpeedHud : MonoBehaviour
 
         if (plateStyle == null)
             plateStyle = new GUIStyle(GUI.skin.label)
-            { fontSize = 14, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            { fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
 
         foreach (var p in plates)
         {
             var c = p.tint;
             c.a = p.alpha;
             plateStyle.normal.textColor = c;
-            GUI.Label(new Rect(p.pos.x - 100f, p.pos.y - 30f, 200f, 20f), p.text, plateStyle);
+            GUI.Label(new Rect(p.pos.x - 130f, p.pos.y - 34f, 260f, 24f), p.text, plateStyle);
         }
     }
 
@@ -190,11 +190,11 @@ public class SpeedHud : MonoBehaviour
         if (motor == null || GameMenu.IsPaused || KeybindsUI.Open) return;
         if (big == null)
         {
-            big = new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold };
+            big = new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold };
             big.normal.textColor = Color.white;
-            small = new GUIStyle(GUI.skin.label) { fontSize = 15 };
+            small = new GUIStyle(GUI.skin.label) { fontSize = 18 };
             small.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
-            dim = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+            dim = new GUIStyle(GUI.skin.label) { fontSize = 15 };
             dim.normal.textColor = new Color(1f, 1f, 1f, 0.45f);
         }
 
@@ -221,9 +221,9 @@ public class SpeedHud : MonoBehaviour
         if (health != null)
         {
             string hp = health.Alive ? $"{health.Hp:0}" : "DEAD";
-            GUI.Label(new Rect(28f, sh - bottomMargin - 34f, 200f, 34f), hp, big);
+            GUI.Label(new Rect(28f, sh - bottomMargin - 42f, 220f, 42f), hp, big);
             if (health.Alive && health.Invulnerable)
-                GUI.Label(new Rect(28f, sh - bottomMargin - 52f, 200f, 20f), "invulnerable", dim);
+                GUI.Label(new Rect(28f, sh - bottomMargin - 64f, 220f, 22f), "invulnerable", dim);
         }
 
         // Armour sits beside health rather than replacing it, and only appears when you have
@@ -231,24 +231,24 @@ public class SpeedHud : MonoBehaviour
         // armour is that HAVING it is the state worth noticing.
         if (armour != null && armour.HasArmour)
         {
-            var armourStyle = new GUIStyle(big) { fontSize = 20 };
+            var armourStyle = new GUIStyle(big) { fontSize = 25 };
             armourStyle.normal.textColor = ArmourTint;
-            GUI.Label(new Rect(96f, sh - bottomMargin - 30f, 120f, 26f), $"{armour.Points:0}", armourStyle);
+            GUI.Label(new Rect(118f, sh - bottomMargin - 36f, 130f, 30f), $"{armour.Points:0}", armourStyle);
 
             // Small bar underneath so the level is readable without reading the number.
             float armourT = Mathf.Clamp01(armour.Points / Mathf.Max(1f, armour.MaxArmour));
-            Box(96f, sh - bottomMargin - 6f, 70f, 4f, new Color(0f, 0f, 0f, 0.45f));
-            Box(96f, sh - bottomMargin - 6f, 70f * armourT, 4f, ArmourTint);
+            Box(118f, sh - bottomMargin - 7f, 80f, 5f, new Color(0f, 0f, 0f, 0.45f));
+            Box(118f, sh - bottomMargin - 7f, 80f * armourT, 5f, ArmourTint);
         }
 
         if (weapon != null)
         {
             string ammo = weapon.Reloading ? "reloading" : $"{weapon.CurrentAmmo} / {weapon.CurrentMag}";
-            var r = new Rect(sw - 228f, sh - bottomMargin - 34f, 200f, 34f);
+            var r = new Rect(sw - 268f, sh - bottomMargin - 42f, 240f, 42f);
             var right = new GUIStyle(big) { alignment = TextAnchor.MiddleRight };
             GUI.Label(r, ammo, right);
             var rightSmall = new GUIStyle(small) { alignment = TextAnchor.MiddleRight };
-            GUI.Label(new Rect(sw - 228f, sh - bottomMargin - 54f, 200f, 20f), weapon.CurrentName, rightSmall);
+            GUI.Label(new Rect(sw - 268f, sh - bottomMargin - 66f, 240f, 22f), weapon.CurrentName, rightSmall);
         }
 
         DrawMobilityPerk(barX, barY);
@@ -273,9 +273,9 @@ public class SpeedHud : MonoBehaviour
     {
         float left = health.RespawnCountdown;
 
-        var title = new GUIStyle(big) { fontSize = 20, alignment = TextAnchor.MiddleCenter };
+        var title = new GUIStyle(big) { fontSize = 25, alignment = TextAnchor.MiddleCenter };
         title.normal.textColor = new Color(1f, 1f, 1f, 0.75f);
-        var number = new GUIStyle(big) { fontSize = 52, alignment = TextAnchor.MiddleCenter };
+        var number = new GUIStyle(big) { fontSize = 66, alignment = TextAnchor.MiddleCenter };
         number.normal.textColor = new Color(1f, 0.85f, 0.4f);
 
         float cy = sh * 0.34f;
@@ -287,15 +287,15 @@ public class SpeedHud : MonoBehaviour
         string killer = health.LastAttackerName;
         if (!string.IsNullOrEmpty(killer))
         {
-            var by = new GUIStyle(big) { fontSize = 22, alignment = TextAnchor.MiddleCenter };
+            var by = new GUIStyle(big) { fontSize = 28, alignment = TextAnchor.MiddleCenter };
             by.normal.textColor = new Color(1f, 0.5f, 0.45f);
-            GUI.Label(new Rect(0f, cy - 34f, sw, 28f), $"killed by {killer}", by);
+            GUI.Label(new Rect(0f, cy - 42f, sw, 34f), $"killed by {killer}", by);
         }
 
-        GUI.Label(new Rect(0f, cy, sw, 26f), "RESPAWNING IN", title);
+        GUI.Label(new Rect(0f, cy, sw, 32f), "RESPAWNING IN", title);
         // One decimal at the end so the last stretch visibly counts rather than sitting on "1".
         string text = left <= countdownPreciseUnder ? $"{left:0.0}" : $"{Mathf.CeilToInt(left)}";
-        GUI.Label(new Rect(0f, cy + 26f, sw, 60f), text, number);
+        GUI.Label(new Rect(0f, cy + 32f, sw, 74f), text, number);
     }
 
     // Mobility perk state, centred directly above the gauge. Deliberately prominent: it is a
@@ -324,7 +324,7 @@ public class SpeedHud : MonoBehaviour
             text = ready ? $"DOUBLE JUMP  [{Keybinds.Label(GameAction.Jump)}]" : "DOUBLE JUMP  spent";
         }
 
-        const float w = 200f, h = 26f;
+        const float w = 250f, h = 30f;
         float x = barX + (barWidth - w) * 0.5f, y = barY - h - 10f;
 
         Color bg = ready ? new Color(1f, 0.78f, 0.28f, 0.22f) : new Color(0f, 0f, 0f, 0.35f);

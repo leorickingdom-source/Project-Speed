@@ -20,10 +20,10 @@ public class KillFeed : NetworkBehaviour
              "corner is empty again by the next one.")]
     public float entryLifetime = 6f;
 
-    public int fontSize = 14;
+    public int fontSize = 18;
     public float topMargin = 12f;
     public float rightMargin = 12f;
-    public float rowHeight = 20f;
+    public float rowHeight = 26f;
 
     struct Entry
     {

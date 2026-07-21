@@ -122,10 +122,10 @@ public class GameMenu : MonoBehaviour
         var lines = Controls();
 
         if (showControls && !paused)
-            ControlsCard(new Rect(Screen.width - 384f, 12f, 372f, 30f + lines.Length * 24f),
+            ControlsCard(new Rect(Screen.width - 468f, 12f, 456f, 34f + lines.Length * RowH),
                 $"CONTROLS   ({Keybinds.Label(Keybinds.Get(GameAction.ToggleControls, 0))})");
 
-        GUI.Label(new Rect(12f, Screen.height - 26f, 800f, 22f),
+        GUI.Label(new Rect(12f, Screen.height - 30f, 900f, 26f),
             $"[{Keybinds.Label(Keybinds.Get(GameAction.ToggleControls, 0))}] controls     " +
             $"[{Keybinds.Label(Keybinds.Get(GameAction.Pause, 0))}] pause / quit", hint);
 
@@ -138,15 +138,15 @@ public class GameMenu : MonoBehaviour
             // Height is derived, not a magic number: the controls card grows with the bindings
             // list and the settings block grew a button row, and the old fixed 470 quietly put
             // the Resume button underneath the sliders.
-            float cardH = lines.Length * 24f + 6f;
-            const float pad = 16f, gap = 10f, leaveH = 30f, footH = 34f;
-            float w = 440f;
-            float h = 46f + cardH + gap + SettingsUI.Height + gap + leaveH + 6f + footH + pad;
+            float cardH = lines.Length * RowH + 8f;
+            const float pad = 16f, gap = 10f, leaveH = 34f, footH = 38f;
+            float w = 520f;
+            float h = 52f + cardH + gap + SettingsUI.Height + gap + leaveH + 6f + footH + pad;
             float x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
 
             GUI.Box(new Rect(x, y, w, h), "PAUSED", panel);
 
-            float cy = y + 46f;
+            float cy = y + 52f;
             ControlsCard(new Rect(x + pad, cy, w - pad * 2f, cardH), null);
             cy += cardH + gap;
 
@@ -169,23 +169,28 @@ public class GameMenu : MonoBehaviour
         }
     }
 
+    // Row pitch, shared by the card and by the pause panel that sizes itself from it. A single
+    // constant because the two used to be separate numbers and drifted apart the moment the
+    // font changed, leaving the panel too short for its own contents.
+    const float RowH = 28f;
+
     void ControlsCard(Rect r, string heading)
     {
         GUI.Box(r, GUIContent.none, panel);
         float yy = r.y + 6f;
-        if (heading != null) { GUI.Label(new Rect(r.x + 10f, yy, r.width - 20f, 22f), heading, header); yy += 26f; }
-        foreach (var c in Controls()) { GUI.Label(new Rect(r.x + 12f, yy, r.width - 24f, 22f), c, row); yy += 24f; }
+        if (heading != null) { GUI.Label(new Rect(r.x + 10f, yy, r.width - 20f, 26f), heading, header); yy += 30f; }
+        foreach (var c in Controls()) { GUI.Label(new Rect(r.x + 12f, yy, r.width - 24f, 26f), c, row); yy += RowH; }
     }
 
     void EnsureStyles()
     {
         if (panel != null) return;
-        panel = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperCenter, fontStyle = FontStyle.Bold, fontSize = 15 };
-        header = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 14 };
+        panel = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperCenter, fontStyle = FontStyle.Bold, fontSize = 19 };
+        header = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 17 };
         header.normal.textColor = new Color(0.55f, 0.9f, 1f);
-        row = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+        row = new GUIStyle(GUI.skin.label) { fontSize = 16 };
         row.normal.textColor = Color.white;
-        hint = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+        hint = new GUIStyle(GUI.skin.label) { fontSize = 16 };
         hint.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
     }
 }

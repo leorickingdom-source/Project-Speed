@@ -31,7 +31,8 @@ public class DeathCam : MonoBehaviour
 
     bool active;
     bool haveTarget;
-    Vector3 target;      // killer's position at the moment of death
+    Transform killer;    // live, so the camera TRACKS them rather than staring at a memory
+    Vector3 target;      // killer's current position, or their last known one once they are gone
     Vector3 anchor;      // where the body was when it died
 
     void Awake()
@@ -41,15 +42,21 @@ public class DeathCam : MonoBehaviour
         if (c != null) cam = c.transform;
     }
 
-    // killerPos == null means nobody was recorded — a pit fall, the void, or a stale attacker.
-    // The camera still pulls back, it just keeps facing the way you were already looking.
-    public void Begin(Vector3? killerPos)
+    // killerTransform may be null even when killerPos is not: the killer can leave, die and
+    // respawn elsewhere, or simply not be a player. In that case the camera holds on their last
+    // known position rather than snapping to wherever their object ended up.
+    //
+    // Both null means nobody was recorded — a pit fall, the void, or a stale attacker. The
+    // camera still pulls back, it just keeps facing the way you were already looking.
+    public void Begin(Transform killerTransform, Vector3? killerPos)
     {
         if (active || cam == null) return;
 
         active = true;
-        haveTarget = killerPos.HasValue;
-        target = killerPos ?? (transform.position + transform.forward * 10f);
+        killer = killerTransform;
+        haveTarget = killerPos.HasValue || killerTransform != null;
+        target = killerTransform != null ? AimPointOf(killerTransform)
+               : killerPos ?? (transform.position + transform.forward * 10f);
         anchor = transform.position;
 
         // Remember where the camera lived so it can be put back EXACTLY. Reparenting is the
@@ -68,10 +75,15 @@ public class DeathCam : MonoBehaviour
         ApplyPose(1f);
     }
 
+    // Chest height rather than the transform origin, which sits at the feet — aiming at the
+    // origin puts the killer in the top half of frame and the floor in the bottom half.
+    static Vector3 AimPointOf(Transform t) => t.position + Vector3.up * 1.0f;
+
     public void End()
     {
         if (!active) return;
         active = false;
+        killer = null;
 
         if (cam != null)
         {
@@ -94,6 +106,12 @@ public class DeathCam : MonoBehaviour
     // is open would otherwise leave the camera stuck mid-swing at timeScale 0.
     void ApplyPose(float step)
     {
+        // Re-read the killer every frame so the camera follows them as they move. The moment
+        // they stop existing — despawned, disconnected, or a bot that died — this stops updating
+        // and the last known position is what stays on screen, which is better than the camera
+        // whipping to a respawn point on the far side of the map.
+        if (killer != null) target = AimPointOf(killer);
+
         Vector3 lookDir = target - anchor;
         lookDir.y = 0f;
         if (lookDir.sqrMagnitude < 0.01f) lookDir = transform.forward;

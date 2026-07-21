@@ -33,7 +33,7 @@ public class PlayerScore : NetworkBehaviour
 
     [Header("Scoreboard")]
     public bool showScoreboard = true;
-    public int fontSize = 16;
+    public int fontSize = 20;
 
     GUIStyle style, mine;
 
@@ -73,10 +73,10 @@ public class PlayerScore : NetworkBehaviour
         var all = FindObjectsByType<PlayerScore>(FindObjectsSortMode.None);
         // Wider than it was: a 16-character name plus "12 / 9" no longer fits in 200px, and a
         // clipped name is worse than no name at all.
-        const float w = 260f;
-        float x = Screen.width - w - 12f, y = 120f;
-        GUI.Label(new Rect(x, y, w, 22f), "SCORE   K / D", mine);
-        y += 24f;
+        const float w = 320f;
+        float x = Screen.width - w - 12f, y = 150f;
+        GUI.Label(new Rect(x, y, w, 26f), "SCORE   K / D", mine);
+        y += 28f;
 
         // Highest kills first so the leader is always on top.
         System.Array.Sort(all, (a, b) => b.Kills.CompareTo(a.Kills));
@@ -86,9 +86,9 @@ public class PlayerScore : NetworkBehaviour
             // Row is drawn in that player's own colour, so the scoreboard and the arena agree.
             var row = new GUIStyle(p.IsOwner ? mine : style);
             row.normal.textColor = p.Tint;
-            GUI.Label(new Rect(x, y, w, 20f),
+            GUI.Label(new Rect(x, y, w, 25f),
                 $"{(p.IsOwner ? "> " : "")}{p.Label}   {p.Kills} / {p.Deaths}", row);
-            y += 20f;
+            y += 25f;
         }
     }
 }

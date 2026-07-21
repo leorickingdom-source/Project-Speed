@@ -80,6 +80,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     Vector3 lastAttackerPos;
     float lastAttackerAt = -999f;
     string lastAttackerName;
+    // Live reference, so the death camera can FOLLOW them rather than hold on the spot they
+    // fired from. Goes null on its own if they despawn, which the camera handles.
+    Transform lastAttackerTransform;
 
     // The SERVER's own record of who last hurt this player. Separate from the client-side one
     // above because they answer different questions from different machines: that one aims the
@@ -105,10 +108,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public float RespawnCountdown => Alive ? 0f : Mathf.Max(0f, localRespawnAt - Time.time);
 
     // Called on the victim's own client from the damage report.
-    public void RecordAttacker(Vector3 worldPos, string attackerName)
+    public void RecordAttacker(Vector3 worldPos, string attackerName, Transform attacker)
     {
         lastAttackerPos = worldPos;
         lastAttackerName = attackerName;
+        lastAttackerTransform = attacker;
         lastAttackerAt = Time.time;
     }
 
@@ -269,8 +273,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // everyone else's copy of this player.
         if (deathCam != null && deathCam.enabled)
         {
-            if (HasFreshAttacker) deathCam.Begin(lastAttackerPos);
-            else deathCam.Begin(null);
+            if (HasFreshAttacker) deathCam.Begin(lastAttackerTransform, lastAttackerPos);
+            else deathCam.Begin(null, null);
         }
 
         if (motor == null) return;
@@ -282,6 +286,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     {
         localRespawnAt = 0f;
         lastAttackerAt = -999f; // a new life does not inherit the last one's killer
+        lastAttackerTransform = null;
 
         if (deathCam != null && deathCam.enabled) deathCam.End();
 

@@ -301,12 +301,14 @@ public class PlayerNetwork : TickNetworkBehaviour
         if (hp == null) return;
 
         string attackerName = null;
+        Transform attackerTransform = null;
         if (attacker != null)
         {
             var id = attacker.GetComponent<PlayerIdentity>();
             attackerName = id != null ? id.Name : attacker.gameObject.name;
+            attackerTransform = attacker.transform; // live, so the death camera can follow them
         }
-        hp.RecordAttacker(worldPos, attackerName);
+        hp.RecordAttacker(worldPos, attackerName, attackerTransform);
     }
 
     [FishNet.Object.TargetRpc]
