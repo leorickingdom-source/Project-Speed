@@ -13,10 +13,18 @@ using UnityEngine;
 // Shows only until connected, then gets out of the way.
 public class ConnectUI : MonoBehaviour
 {
-    [Tooltip("Address a CLIENT dials. localhost = same machine. A LAN/Tailscale/public IP " +
-             "connects to another machine.")]
-    public string address = "localhost";
-    public ushort port = 7770;
+    // Address and port live in GameSettings so they survive a restart. They were serialized
+    // fields resetting to localhost every launch, which is fine while testing against your own
+    // machine and miserable once a group plays on one fixed host — everybody retyped the same
+    // string every session. The inspector values below are only the FIRST-RUN defaults; after
+    // that the saved ones win.
+    [Tooltip("First-run default only. Once a player connects, their last address is remembered. " +
+             "localhost = same machine; a LAN, tunnel or public address reaches another machine.")]
+    public string defaultAddress = "localhost";
+    public ushort defaultPort = 7770;
+
+    string address = "localhost";
+    ushort port = 7770;
 
     GUIStyle label, field, button, selected, error;
     Texture2D panel;
@@ -37,7 +45,18 @@ public class ConnectUI : MonoBehaviour
     // there, so the only symptom a player sees is that the Host button does nothing.
     string lastError;
 
-    void Awake() => GameSettings.Load();
+    void Awake()
+    {
+        GameSettings.Load();
+
+        // First run has nothing saved, so seed the store from the inspector values and keep
+        // them in step from then on.
+        if (string.IsNullOrEmpty(GameSettings.Address)) GameSettings.Address = defaultAddress;
+        if (GameSettings.Port == 0) GameSettings.Port = defaultPort;
+
+        address = GameSettings.Address;
+        port = GameSettings.Port;
+    }
 
     // Rebind capture has to be driven from Update — see KeybindsUI.Tick. Harmless when the
     // panel is shut, and idempotent if GameMenu is ticking it in the same frame.
@@ -269,8 +288,15 @@ public class ConnectUI : MonoBehaviour
 
     // Push the typed address/port into the transport before any connection starts —
     // afterwards it's too late, the socket is already bound.
+    //
+    // Also the point where the pair is remembered. Saved on CONNECT rather than on every
+    // keystroke: a half-typed address should not become the value you come back to next launch.
     void ApplyTransport(FishNet.Managing.NetworkManager nm)
     {
+        GameSettings.Address = address;
+        GameSettings.Port = port;
+        GameSettings.Save();
+
         Transport t = nm.TransportManager.Transport;
         if (t == null) return;
         t.SetClientAddress(address);

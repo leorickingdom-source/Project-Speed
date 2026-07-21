@@ -15,6 +15,8 @@ public static class GameSettings
     const string KeyVol = "opt_volume";
     const string KeyFov = "opt_fov";
     const string KeyName = "opt_playername";
+    const string KeyAddress = "opt_address";
+    const string KeyPort = "opt_port";
 
     // Shipped values, named rather than inlined so Reset cannot drift from the initial state
     // the fields below start at.
@@ -29,6 +31,18 @@ public static class GameSettings
     // Empty means "use the colour name". Not reset by ResetToDefaults — wiping someone's name
     // because they wanted the default FOV back is not what that button says it does.
     public static string PlayerName = "";
+
+    // Last address and port dialled, remembered across launches.
+    //
+    // The connect screen used to reset to localhost every time, which is fine when you are
+    // testing against your own machine and miserable the moment the group plays on a fixed
+    // address — everyone retypes the same host string every single session. Persisting it means
+    // it is typed once, ever.
+    //
+    // Not reset by ResetToDefaults either: that button is about how the game feels, and wiping
+    // the address would eject you from the group's server for no reason you asked for.
+    public static string Address = "localhost";
+    public static ushort Port = 7770;
 
     // How much SpeedFeel widens FOV at top speed. Kept as a delta so raising base FOV does
     // not compound into an unusable maximum.
@@ -46,6 +60,10 @@ public static class GameSettings
         Volume = PlayerPrefs.GetFloat(KeyVol, Volume);
         Fov = PlayerPrefs.GetFloat(KeyFov, Fov);
         PlayerName = PlayerIdentity.Sanitise(PlayerPrefs.GetString(KeyName, PlayerName));
+        Address = PlayerPrefs.GetString(KeyAddress, Address);
+        // Stored as int because PlayerPrefs has no ushort; clamped on the way back out so a
+        // hand-edited prefs file cannot produce a port the transport will reject.
+        Port = (ushort)Mathf.Clamp(PlayerPrefs.GetInt(KeyPort, Port), 1, 65535);
         loaded = true;
         Keybinds.Load(); // controls live alongside these; one call site, one place to forget
         Apply();
@@ -74,6 +92,8 @@ public static class GameSettings
         PlayerPrefs.SetFloat(KeyVol, Volume);
         PlayerPrefs.SetFloat(KeyFov, Fov);
         PlayerPrefs.SetString(KeyName, PlayerName ?? "");
+        PlayerPrefs.SetString(KeyAddress, Address ?? "localhost");
+        PlayerPrefs.SetInt(KeyPort, Port);
         PlayerPrefs.Save();
     }
 

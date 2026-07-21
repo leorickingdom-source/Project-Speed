@@ -111,7 +111,45 @@ change that would need a swap key anyway. One task, not two.
 
 ---
 
-## 4. Placeholders and small gaps
+## 4. Getting friends connected
+
+Direct IP only — Tugboat has no discovery and no NAT traversal. Bundled transports are
+Tugboat, Synapse and Multipass; no relay, no lobbies, no friend lists.
+
+**Current approach: `playit.gg` free tunnel.** Host runs the agent alongside the game, which
+gives a permanent public address with no port forwarding and works behind CGNAT. Shared once,
+never changes. The connect screen now remembers the last address and port, so it is typed once
+per player, ever.
+
+Cost: the host's machine must be on, and traffic relays — which adds latency, and this game is
+more sensitive to that than most since everything rests on movement precision.
+
+Rejected: **Tailscale** (free tier caps at 3 users, and every friend needs an account plus an
+approval — per-person admin forever). **Photon** (would mean replacing FishNet and rewriting the
+prediction/reconcile layer, which is the hardest thing already working here, to solve a
+connection-brokering problem).
+
+If it outgrows the tunnel, in order of effort:
+
+1. **Free VPS** (Oracle Cloud Always Free) running a Linux headless server. Fixed address,
+   always up, nobody's PC needed, no relay hop. **Blocked on the bug below.**
+2. **EOS** — free, no server to run, NAT punching with relay fallback, lobbies and join codes.
+   Anonymous auth means nobody logs into anything. A transport swap, not a rewrite: FishNet and
+   the prediction layer stay untouched.
+3. **Steam** — best UX ("Join Game" from the overlay) but only if shipping there.
+
+### Bug: the dedicated Server path never loads a map
+
+`ConnectUI`'s **Host** button subscribes to `OnServerState` and calls `LoadChosenMap` once the
+socket is up. The **Server** button does neither — it starts the server and stops. So a
+dedicated server never registers a global scene, and joining clients get no scene assignment.
+It would appear to work if everyone happened to be in Arena and break confusingly otherwise.
+
+Small fix, but load-bearing for any VPS route.
+
+---
+
+## 5. Placeholders and small gaps
 
 - **Armour pickup is a primitive cube.** Reads as clearly *not a sphere*, which was the point,
   but looks like programmer art. Mesh/material job.
@@ -123,7 +161,7 @@ change that would need a swap key anyway. One task, not two.
 
 ---
 
-## 5. Balance reference
+## 6. Balance reference
 
 Baseline as of the revolver / armour pass, so future tuning has something to measure against.
 
