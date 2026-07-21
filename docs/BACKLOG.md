@@ -121,6 +121,44 @@ gives a permanent public address with no port forwarding and works behind CGNAT.
 never changes. The connect screen now remembers the last address and port, so it is typed once
 per player, ever.
 
+### Running a session
+
+Host side, every time:
+
+1. playit agent running.
+2. Launch, click **Host**. The address and port boxes are ignored when hosting — the server
+   binds `hostBindPort` (7770), which is what the tunnel forwards to.
+3. Stay open. Your machine is the server; quitting drops everyone.
+
+What friends enter once (remembered afterwards, including through a settings reset):
+
+```
+Address:  excellent-sources.gl.at.ply.gg
+Port:     46417
+```
+
+Tunnel must be **UDP** — Tugboat is LiteNetLib, and a TCP tunnel looks fine in the dashboard
+while never connecting. Local target `127.0.0.1:7770`.
+
+Gotchas worth knowing before someone reports a "bug":
+
+- **Only the tunnel owner can host.** It points at one machine. A friend clicking Host starts a
+  server nobody can reach.
+- **Host first.** Joining before the host is up gives "Could not reach a host…", which is
+  correct, not a failure.
+- **Map, mode, bots and difficulty are the host's alone.** Clients can toggle them locally and
+  it is ignored — MatchManager syncs the host's values.
+- **IPv6.** The hostname resolves to both A and AAAA records. If someone cannot connect, having
+  them use `147.185.221.225` forces IPv4 and is worth trying before assuming anything is broken.
+
+Verified end to end: a client dialled the public address, traffic went out to the relay and back
+into the local server, connection authenticated and a player spawned.
+
+**Measuring latency: do not trust the editor.** FishNet's RTT is measured across ticks, so an
+unfocused editor throttling its frame rate reports nonsense — a direct `127.0.0.1` loopback
+measured 140ms under those conditions. The HUD ping readout exists for this; read it from a real
+build.
+
 Cost: the host's machine must be on, and traffic relays — which adds latency, and this game is
 more sensitive to that than most since everything rests on movement precision.
 
