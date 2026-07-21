@@ -77,7 +77,10 @@ public class PlayerAudio : MonoBehaviour
             case 4: Play(fireLow, 0.8f, 1.0f); break;   // Shotgun — full-bodied
             case 3: Play(fireHigh, 1.25f, 0.55f); break;// SMG — thin and fast
             case 1: Play(fireHigh, 1.0f, 0.7f); break;  // Rifle
-            default: Play(fireHigh, 0.9f, 0.8f); break; // Pistol
+            // Revolver — the loudest thing in the game per shot, and deliberately deep. Six
+            // rounds landing a 3-shot kill has to SOUND like it hurts, or the weapon's whole
+            // premise ("every trigger pull matters") is contradicted by a polite click.
+            default: Play(fireLow, 0.7f, 1.15f); break;
         }
     }
 

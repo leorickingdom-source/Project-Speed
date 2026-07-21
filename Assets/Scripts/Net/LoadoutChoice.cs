@@ -11,7 +11,7 @@ public static class LoadoutChoice
     // Index into WeaponController.weapons. 1 = Rifle, the default starter.
     public static int WeaponIndex = 1;
 
-    public static readonly string[] Names = { "Pistol", "Rifle", "Sniper", "SMG", "Shotgun" };
+    public static readonly string[] Names = { "Revolver", "Rifle", "Sniper", "SMG", "Shotgun" };
 
     // Range identity, so the pick is informed. Damage numbers are close across the set —
     // what actually separates them is WHERE that damage lands.
@@ -19,7 +19,7 @@ public static class LoadoutChoice
     {
         switch (i)
         {
-            case 0: return "Pistol - no falloff at all. Never great, never punished. The consistency pick.";
+            case 0: return "Revolver - 6 rounds, 3-shot kill, no falloff at any range. Miss and you feel it.";
             case 1: return "Rifle - all-rounder. Full damage to 45m, tapers to 70% at 90m.";
             case 2: return "Sniper - only 40% damage under 10m, full past 25m. Deadly at range, helpless if rushed.";
             case 3: return "SMG - close-mid pressure. Full to 20m, down to 40% by 45m.";

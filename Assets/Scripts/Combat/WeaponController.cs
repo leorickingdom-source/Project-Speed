@@ -88,7 +88,7 @@ public class WeaponController : MonoBehaviour
 
     [Header("Loadout")]
     public Weapon[] weapons;            // auto-filled with the default 5 if left empty
-    [Tooltip("Index into weapons[] that everyone spawns holding. 0 Pistol, 1 Rifle, 2 Sniper, " +
+    [Tooltip("Index into weapons[] that everyone spawns holding. 0 Revolver, 1 Rifle, 2 Sniper, " +
              "3 SMG, 4 Shotgun.")]
     public int startingWeapon = 1;
     [Tooltip("Off = deathmatch with a single weapon: the number keys do nothing and you keep " +
@@ -163,11 +163,27 @@ public class WeaponController : MonoBehaviour
         // on purpose: with a locked loadout, a strictly-stronger weapon would just be the one
         // correct pick. Differentiating by WHERE the damage applies keeps every choice live.
 
-        // Pistol: the consistency pick. No falloff at all — never great, never punished.
-        // Its identity is being the only weapon that does not care about distance.
-        new Weapon { name = "Pistol", kind = FireKind.Hitscan, automatic = true,  cycle = 0.28f,
-                     damage = 22f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(0.90f, 0.90f, 0.70f),
-                     magSize = 15, reloadTime = 1.0f },
+        // Revolver: the precision pick. Six rounds, semi-auto, and a 3-shot body kill — every
+        // trigger pull is a third of a kill, so a miss costs more than it does on any other gun.
+        //
+        // Replaces the old Pistol, which was a 15-round 22-damage automatic described as "never
+        // great, never punished". That is a description of a weapon nobody has an opinion about:
+        // its 7-shot kill made it strictly worse than the Rifle's 11 faster ones, and armour
+        // pushed it to a 3.08s kill, the slowest in the game. The fix was never more damage per
+        // second — it was giving it a reason to exist.
+        //
+        // Keeps zero falloff, which is now the point rather than a consolation: it is the only
+        // weapon in the loadout that hits exactly as hard at 90m as at 2m. That makes it a real
+        // long-range threat for someone accurate WITHOUT stepping on the Sniper, which still
+        // needs fewer shots at range and still gets punished under 10m. The Revolver trades
+        // the Sniper's raw efficiency for never having a bad distance.
+        //
+        // Semi-auto on purpose (automatic = false -> one shot per click). Held-fire would let
+        // the cycle time do the aiming; a deliberate trigger pull is what makes landing three
+        // in a row on a bhopping target feel earned.
+        new Weapon { name = "Revolver", kind = FireKind.Hitscan, automatic = false, cycle = 0.55f,
+                     damage = 65f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(1.00f, 0.72f, 0.40f),
+                     magSize = 6, reloadTime = 1.4f },
         // Rifle: honest all-rounder, mild taper so it never dominates the sniper lane.
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
                      damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
@@ -191,7 +207,7 @@ public class WeaponController : MonoBehaviour
         // restored rather than merely rescued at the boundary.
         //
         // Deliberately NOT done by raising the controller's shared headMultiplier: that value
-        // is used by every hitscan weapon, so moving it would rebalance the Rifle, SMG, Pistol
+        // is used by every hitscan weapon, so moving it would rebalance the Rifle, SMG, Revolver
         // and Shotgun at the same time.
         //
         // Close range is untouched by this: 300 * 0.4 = 120 under 10m, still not a one-shot,
@@ -207,8 +223,19 @@ public class WeaponController : MonoBehaviour
                      nearDistance = 20f, nearMultiplier = 1f, farDistance = 45f, farMultiplier = 0.4f,
                      magSize = 30, reloadTime = 1.4f },
         // Shotgun: brutal inside 8m, nearly harmless by 20m. Must close to matter.
+        //
+        // 13 per pellet (104 a shell), raised from 10, ENTIRELY to survive armour. Armour soaks
+        // a fraction of each hit, so it costs every weapon roughly the same percentage — but it
+        // is paid in shots, and players count shots. Going 11 -> 18 is a weapon that got worse;
+        // going 2 -> 4 is a weapon that lost its identity, because "two shells" WAS the identity.
+        // At 10 the shotgun ended up on a 2.10s armoured kill, slower than the Rifle's 1.87s,
+        // which made the one weapon that has to walk into punching range the slowest in the game.
+        //
+        // 13 restores 2 shells bare / 3 through full armour, and holds both of those against
+        // Vitality (190) too. Bare performance is deliberately unchanged: this is an anti-armour
+        // correction, not a buff to the gun.
         new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
-                     damage = 10f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
+                     damage = 13f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
                      nearDistance = 8f, nearMultiplier = 1f, farDistance = 20f, farMultiplier = 0.2f,
                      magSize = 6, reloadTime = 1.8f },
         // Bow / Knives / Crossbow SHELVED (not deleted). All-projectile play was the problem:
