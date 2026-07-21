@@ -23,10 +23,16 @@ public class ConnectUI : MonoBehaviour
     public string defaultAddress = "localhost";
     public ushort defaultPort = 7770;
 
+    [Tooltip("Port the SERVER binds when you Host. Separate from the port clients dial, because " +
+             "behind a tunnel or a port-forward the two are different numbers: the tunnel " +
+             "listens publicly on one port and forwards to this one. Leave at 7770 unless the " +
+             "tunnel's local target says otherwise.")]
+    public ushort hostBindPort = 7770;
+
     string address = "localhost";
     ushort port = 7770;
 
-    GUIStyle label, field, button, selected, error;
+    GUIStyle label, field, button, selected, error, hint;
     Texture2D panel;
     bool Started => InstanceFinder.NetworkManager != null &&
                     (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted);
@@ -82,6 +88,8 @@ public class ConnectUI : MonoBehaviour
             selected.normal.textColor = new Color(1f, 0.9f, 0.4f);
             error = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
             error.normal.textColor = new Color(1f, 0.45f, 0.4f);
+            hint = new GUIStyle(GUI.skin.label) { fontSize = 12 };
+            hint.normal.textColor = new Color(1f, 1f, 1f, 0.45f);
         }
 
         // Once running, offer only a way out — the address is locked in by then. The rebinder
@@ -111,11 +119,17 @@ public class ConnectUI : MonoBehaviour
         GUI.DrawTexture(new Rect(0, 0, panelW, panelH), panel);
         GUI.color = Color.white;
 
-        GUI.Label(new Rect(12, 10, 300, 24), "Host address", label);
+        GUI.Label(new Rect(12, 10, 300, 24), "Host address  (to join)", label);
         address = GUI.TextField(new Rect(12, 36, 220, 28), address, field);
         GUI.Label(new Rect(240, 10, 60, 24), "Port", label);
         string portText = GUI.TextField(new Rect(240, 36, 70, 28), port.ToString(), field);
         if (ushort.TryParse(portText, out ushort p)) port = p;
+
+        // Says out loud that hosting ignores the two fields above. Behind a tunnel they are
+        // different numbers, and a host who assumes the port box applies to them binds a port
+        // nothing forwards to and gets no error to explain it.
+        if (hostBindPort != port)
+            GUI.Label(new Rect(12, 62, 320, 20), $"hosting binds :{hostBindPort}", hint);
 
         // Loadout is chosen HERE, before connecting, and locked for the match. Picking after
         // you spawn would make it a counter-pick rather than a commitment.
@@ -185,7 +199,7 @@ public class ConnectUI : MonoBehaviour
         if (GUI.Button(new Rect(12, 72, 100, 32), hosting ? "Hosting..." : "Host", button)
             && !hosting)
         {
-            ApplyTransport(nm);
+            ApplyTransport(nm, asServer: true);
             lastError = null;
             hosting = true;
             // StartConnection is ASYNC: IsServerStarted is still false on the next line, and
@@ -198,7 +212,7 @@ public class ConnectUI : MonoBehaviour
         if (GUI.Button(new Rect(120, 72, 100, 32), joining ? "Joining..." : "Client", button)
             && !joining)
         {
-            ApplyTransport(nm);
+            ApplyTransport(nm, asServer: false);
             lastError = null;
             joining = true;
             nm.ClientManager.OnClientConnectionState += OnClientState;
@@ -208,7 +222,7 @@ public class ConnectUI : MonoBehaviour
         // Dedicated server: no local player, for a box with a public IP.
         if (GUI.Button(new Rect(228, 72, 100, 32), "Server", button))
         {
-            ApplyTransport(nm);
+            ApplyTransport(nm, asServer: true);
             nm.ServerManager.StartConnection();
         }
 
@@ -286,21 +300,32 @@ public class ConnectUI : MonoBehaviour
         nm.SceneManager.LoadGlobalScenes(data);
     }
 
-    // Push the typed address/port into the transport before any connection starts —
-    // afterwards it's too late, the socket is already bound.
+    // Push address/port into the transport before any connection starts — afterwards it's too
+    // late, the socket is already bound.
     //
-    // Also the point where the pair is remembered. Saved on CONNECT rather than on every
-    // keystroke: a half-typed address should not become the value you come back to next launch.
-    void ApplyTransport(FishNet.Managing.NetworkManager nm)
+    // asServer matters because SetPort means two different things. Serving, it is the port the
+    // socket BINDS locally. Joining, it is the port dialled on the far end. Behind a tunnel or
+    // a port-forward those are different numbers — the tunnel listens publicly on one and
+    // forwards to the other — so using the typed value for both means a player who once joined
+    // a tunnelled game then hosts on the tunnel's PUBLIC port, binds a port nothing forwards to,
+    // and fails with no error anywhere. Persisting the typed port made that likelier, not less.
+    void ApplyTransport(FishNet.Managing.NetworkManager nm, bool asServer)
     {
-        GameSettings.Address = address;
-        GameSettings.Port = port;
-        GameSettings.Save();
+        // Only remember what was actually dialled. Hosting does not use the address at all, so
+        // hosting must not overwrite the group's server address with a stale local one.
+        if (!asServer)
+        {
+            GameSettings.Address = address;
+            GameSettings.Port = port;
+            GameSettings.Save();
+        }
 
         Transport t = nm.TransportManager.Transport;
         if (t == null) return;
-        t.SetClientAddress(address);
-        t.SetPort(port);
+
+        // Host is server + local client, so its client half dials its own bound port on loopback.
+        t.SetClientAddress(asServer ? "localhost" : address);
+        t.SetPort(asServer ? hostBindPort : port);
     }
 
     // Leave the match and return to the connect screen without restarting the app.
