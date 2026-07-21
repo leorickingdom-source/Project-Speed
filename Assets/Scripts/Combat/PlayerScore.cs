@@ -16,10 +16,20 @@ public class PlayerScore : NetworkBehaviour
     public int Kills => kills.Value;
     public int Deaths => deaths.Value;
 
-    // Named by colour so the scoreboard matches what you actually see in the arena —
-    // "Red 3/1" is legible mid-match in a way that "Player 0" is not.
-    public string Label => PlayerColors.NameFor(OwnerId);
+    // The player's chosen name when they set one, otherwise the colour — which is still the
+    // right fallback, because "Red 3/1" is legible mid-match in a way that "Player 0" is not.
+    public string Label
+    {
+        get
+        {
+            if (identity == null) identity = GetComponent<PlayerIdentity>();
+            return identity != null ? identity.Name : PlayerColors.NameFor(OwnerId);
+        }
+    }
+
     public Color Tint => PlayerColors.For(OwnerId);
+
+    PlayerIdentity identity;
 
     [Header("Scoreboard")]
     public bool showScoreboard = true;
@@ -61,8 +71,11 @@ public class PlayerScore : NetworkBehaviour
         }
 
         var all = FindObjectsByType<PlayerScore>(FindObjectsSortMode.None);
-        float x = Screen.width - 200f, y = 120f;
-        GUI.Label(new Rect(x, y, 200f, 22f), "SCORE   K / D", mine);
+        // Wider than it was: a 16-character name plus "12 / 9" no longer fits in 200px, and a
+        // clipped name is worse than no name at all.
+        const float w = 260f;
+        float x = Screen.width - w - 12f, y = 120f;
+        GUI.Label(new Rect(x, y, w, 22f), "SCORE   K / D", mine);
         y += 24f;
 
         // Highest kills first so the leader is always on top.
@@ -73,7 +86,7 @@ public class PlayerScore : NetworkBehaviour
             // Row is drawn in that player's own colour, so the scoreboard and the arena agree.
             var row = new GUIStyle(p.IsOwner ? mine : style);
             row.normal.textColor = p.Tint;
-            GUI.Label(new Rect(x, y, 200f, 20f),
+            GUI.Label(new Rect(x, y, w, 20f),
                 $"{(p.IsOwner ? "> " : "")}{p.Label}   {p.Kills} / {p.Deaths}", row);
             y += 20f;
         }

@@ -28,6 +28,15 @@ public class Weapon
     public float range = 200f;
     public Color tracer = Color.white;
 
+    [Tooltip("Per-weapon headshot multiplier. 0 = use WeaponController.headMultiplier. Exists " +
+             "so one weapon's headshot can be tuned without touching every other weapon's — " +
+             "the controller's value is shared, so raising it is a balance change to the whole " +
+             "loadout, not to the gun you were actually thinking about.")]
+    public float headMultiplierOverride = 0f;
+
+    public float HeadMultiplierOr(float fallback) =>
+        headMultiplierOverride > 0f ? headMultiplierOverride : fallback;
+
     [Header("Damage falloff")]
     // Two points on a damage-vs-distance line, so the SAME fields express both shapes:
     // normal falloff (near=1.0 -> far=0.2, e.g. shotgun) AND inverted (near=0.4 -> far=1.0,
@@ -173,8 +182,23 @@ public class WeaponController : MonoBehaviour
         //              magSize = 4, reloadTime = 2.2f },
         // Sniper: INVERTED falloff — 40% under 10m, full past 25m. Being rushed is now the
         // sniper's actual weakness rather than a thing players had to agree to pretend.
+        //
+        // headMultiplierOverride 3x (300 damage), not the shared 2x, because ARMOUR moved the
+        // one-shot threshold. Armour soaks min(dmg*0.6, 100), so past 166 damage the soak is
+        // capped at 100 and the rest lands on health: a one-shot through full armour needs
+        // dmg - 100 >= 150, i.e. 250. 300 clears it by 50 — the SAME margin a 200-damage
+        // headshot had over 150 health before armour existed, so the sniper's identity is
+        // restored rather than merely rescued at the boundary.
+        //
+        // Deliberately NOT done by raising the controller's shared headMultiplier: that value
+        // is used by every hitscan weapon, so moving it would rebalance the Rifle, SMG, Pistol
+        // and Shotgun at the same time.
+        //
+        // Close range is untouched by this: 300 * 0.4 = 120 under 10m, still not a one-shot,
+        // so rushing a sniper is exactly as correct as it was.
         new Weapon { name = "Sniper", kind = FireKind.Hitscan, automatic = true,  cycle = 1.2f,
                      damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f),
+                     headMultiplierOverride = 3f,
                      nearDistance = 10f, nearMultiplier = 0.4f, farDistance = 25f, farMultiplier = 1f,
                      magSize = 5, reloadTime = 1.8f },
         // SMG: close-mid pressure, gutted at range so it cannot contest the lane.
@@ -208,9 +232,9 @@ public class WeaponController : MonoBehaviour
 
     void Update()
     {
-        if (Time.timeScale == 0f) return; // no firing / switching while paused
+        if (Time.timeScale == 0f) return;   // no firing / switching while paused
+        if (KeybindsUI.Open) return;        // nor while a click is being read as a binding
         var kb = Keyboard.current;
-        var m = Mouse.current;
         if (kb != null && weapons != null)
         {
             // Deathmatch default: one weapon, no switching. The number keys are ignored
@@ -227,8 +251,11 @@ public class WeaponController : MonoBehaviour
                 Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
                 if (Current != prev) reloadDoneAt = 0f;   // switching cancels a reload
             }
-            if (kb.rKey.wasPressedThisFrame) StartReload();
         }
+
+        // Remappable, unlike the weapon-slot digits above: reload is pressed constantly, the
+        // slots are off entirely in the default deathmatch mode.
+        if (Keybinds.Pressed(GameAction.Reload)) StartReload();
 
         Weapon w = CurrentWeapon;
 
@@ -239,9 +266,11 @@ public class WeaponController : MonoBehaviour
             reloadDoneAt = 0f;
         }
 
-        if (w != null && m != null && !Reloading)
+        if (w != null && !Reloading)
         {
-            bool wantFire = w.automatic ? m.leftButton.isPressed : m.leftButton.wasPressedThisFrame;
+            bool wantFire = w.automatic
+                ? Keybinds.Held(GameAction.Fire)
+                : Keybinds.Pressed(GameAction.Fire);
             if (wantFire && Time.time >= nextFire)
             {
                 if (w.ammo > 0)
@@ -300,7 +329,7 @@ public class WeaponController : MonoBehaviour
                     // Headshot: hit lands in the top slice of the target's collider.
                     bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
                     // Falloff is per-pellet: each shotgun pellet has its own travel distance.
-                    float dmg = (head ? w.damage * headMultiplier : w.damage)
+                    float dmg = (head ? w.damage * w.HeadMultiplierOr(headMultiplier) : w.damage)
                                 * scale * w.DamageAtRange(hit.distance);
                     ApplyDamage(hit.collider, hp, dmg);
                 }

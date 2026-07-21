@@ -6,17 +6,37 @@ using UnityEngine.InputSystem;
 // Self-contained — delete this component for a release build.
 public class GameMenu : MonoBehaviour
 {
-    static readonly string[] Controls =
+    // Built from the live bindings, not written out by hand. The old hardcoded list was a
+    // second source of truth for the controls and could only ever be right for a player who
+    // had not changed anything — which, now that changing them is possible, is the wrong
+    // default assumption.
+    static string[] controls;
+    static int controlsVersion = -1;
+
+    static string[] Controls()
     {
-        "WASD  —  move",
-        "Space  —  jump (hold to bunny-hop)",
-        "Ctrl / C  —  crouch · slide · crouch-jump",
-        "Mouse  —  look     LMB  —  fire     R  —  reload",
-        "Deathmatch  —  one weapon, most kills wins",
-        "RMB  —  grapple (reels you in)",
-        "Shift, or Space in mid-air  —  dash (Dash passive)",
-        "Aim for the head  —  2x damage",
-    };
+        if (controls != null && controlsVersion == Keybinds.Version) return controls;
+        controlsVersion = Keybinds.Version;
+
+        // Primary slot only for the composite lines — spelling out both slots turns "WASD"
+        // into "W / Up A / Left S / Down D / Right", which nobody reads.
+        string P(GameAction a) => Keybinds.Label(Keybinds.Get(a, 0));
+        string B(GameAction a) => Keybinds.Label(a);
+
+        controls = new[]
+        {
+            $"{P(GameAction.MoveForward)}{P(GameAction.MoveLeft)}{P(GameAction.MoveBack)}{P(GameAction.MoveRight)}  —  move",
+            $"{B(GameAction.Jump)}  —  jump (hold to bunny-hop)",
+            $"{B(GameAction.Crouch)}  —  crouch · slide · crouch-jump",
+            $"Mouse  —  look     {B(GameAction.Fire)}  —  fire     {B(GameAction.Reload)}  —  reload",
+            $"{B(GameAction.Grapple)}  —  grapple (reels you in)",
+            $"{B(GameAction.Dash)}, or {P(GameAction.Jump)} in mid-air  —  dash (Dash passive)",
+            "Deathmatch  —  one weapon, most kills wins",
+            "Aim for the head  —  2x damage",
+            $"{B(GameAction.ToggleControls)}  —  this card     {B(GameAction.Pause)}  —  pause",
+        };
+        return controls;
+    }
 
     bool showControls = true; // visible on launch
     bool paused;
@@ -48,11 +68,16 @@ public class GameMenu : MonoBehaviour
 
     void Update()
     {
+        KeybindsUI.Tick();
+        // The rebinder owns the keyboard while it is up: every press there is either a new
+        // binding or a way out of the panel, and none of them should also toggle the menu.
+        if (KeybindsUI.Open || KeybindsUI.ConsumedInput) return;
+
+        if (Keybinds.Pressed(GameAction.ToggleControls)) showControls = !showControls;
+        if (Keybinds.Pressed(GameAction.Pause)) SetPaused(!paused);
+
         var kb = Keyboard.current;
-        if (kb == null) return;
-        if (kb.tabKey.wasPressedThisFrame) showControls = !showControls;
-        if (kb.escapeKey.wasPressedThisFrame) SetPaused(!paused);
-        if (paused && kb.qKey.wasPressedThisFrame) Quit();
+        if (paused && kb != null && kb.qKey.wasPressedThisFrame) Quit();
     }
 
     void SetPaused(bool p)
@@ -90,10 +115,19 @@ public class GameMenu : MonoBehaviour
         if (!FishNet.InstanceFinder.IsClientStarted && !FishNet.InstanceFinder.IsServerStarted)
             return;
 
-        if (showControls && !paused)
-            ControlsCard(new Rect(Screen.width - 344f, 12f, 332f, 30f + Controls.Length * 24f), "CONTROLS   (Tab)");
+        // Modal. IMGUI will happily route a click to the Quit button sitting underneath the
+        // rebinder, so nothing else may draw while it is up.
+        if (KeybindsUI.Open) { KeybindsUI.Draw(); return; }
 
-        GUI.Label(new Rect(12f, Screen.height - 26f, 800f, 22f), "[Tab] controls     [Esc] pause / quit", hint);
+        var lines = Controls();
+
+        if (showControls && !paused)
+            ControlsCard(new Rect(Screen.width - 384f, 12f, 372f, 30f + lines.Length * 24f),
+                $"CONTROLS   ({Keybinds.Label(Keybinds.Get(GameAction.ToggleControls, 0))})");
+
+        GUI.Label(new Rect(12f, Screen.height - 26f, 800f, 22f),
+            $"[{Keybinds.Label(Keybinds.Get(GameAction.ToggleControls, 0))}] controls     " +
+            $"[{Keybinds.Label(Keybinds.Get(GameAction.Pause, 0))}] pause / quit", hint);
 
         if (paused)
         {
@@ -101,19 +135,37 @@ public class GameMenu : MonoBehaviour
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
             GUI.color = Color.white;
 
-            float w = 400f, h = 470f, x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
+            // Height is derived, not a magic number: the controls card grows with the bindings
+            // list and the settings block grew a button row, and the old fixed 470 quietly put
+            // the Resume button underneath the sliders.
+            float cardH = lines.Length * 24f + 6f;
+            const float pad = 16f, gap = 10f, leaveH = 30f, footH = 34f;
+            float w = 440f;
+            float h = 46f + cardH + gap + SettingsUI.Height + gap + leaveH + 6f + footH + pad;
+            float x = (Screen.width - w) * 0.5f, y = (Screen.height - h) * 0.5f;
+
             GUI.Box(new Rect(x, y, w, h), "PAUSED", panel);
-            ControlsCard(new Rect(x + 16f, y + 46f, w - 32f, Controls.Length * 24f + 6f), null);
-            SettingsUI.Draw(x + 16f, y + 56f + Controls.Length * 24f, w - 32f);
-            if (GUI.Button(new Rect(x + 16f, y + h - 84f, w - 32f, 30f), "Leave match  —  back to menu"))
+
+            float cy = y + 46f;
+            ControlsCard(new Rect(x + pad, cy, w - pad * 2f, cardH), null);
+            cy += cardH + gap;
+
+            SettingsUI.Draw(x + pad, cy, w - pad * 2f);
+            cy += SettingsUI.Height + gap;
+
+            if (GUI.Button(new Rect(x + pad, cy, w - pad * 2f, leaveH), "Leave match  —  back to menu"))
             {
                 GameSettings.Save();
                 paused = false;
                 ConnectUI.LeaveMatch();
                 return;
             }
-            if (GUI.Button(new Rect(x + 16f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Resume  (Esc)")) SetPaused(false);
-            if (GUI.Button(new Rect(x + w * 0.5f + 4f, y + h - 48f, (w - 40f) * 0.5f, 34f), "Quit  (Q)")) Quit();
+            cy += leaveH + 6f;
+
+            float halfW = (w - pad * 2f - 8f) * 0.5f;
+            if (GUI.Button(new Rect(x + pad, cy, halfW, footH),
+                    $"Resume  ({Keybinds.Label(Keybinds.Get(GameAction.Pause, 0))})")) SetPaused(false);
+            if (GUI.Button(new Rect(x + pad + halfW + 8f, cy, halfW, footH), "Quit  (Q)")) Quit();
         }
     }
 
@@ -122,7 +174,7 @@ public class GameMenu : MonoBehaviour
         GUI.Box(r, GUIContent.none, panel);
         float yy = r.y + 6f;
         if (heading != null) { GUI.Label(new Rect(r.x + 10f, yy, r.width - 20f, 22f), heading, header); yy += 26f; }
-        foreach (var c in Controls) { GUI.Label(new Rect(r.x + 12f, yy, r.width - 24f, 22f), c, row); yy += 24f; }
+        foreach (var c in Controls()) { GUI.Label(new Rect(r.x + 12f, yy, r.width - 24f, 22f), c, row); yy += 24f; }
     }
 
     void EnsureStyles()

@@ -37,6 +37,7 @@ public class PassivePicker : MonoBehaviour
     {
         var kb = Keyboard.current;
         if (kb == null || loadout == null) return;
+        if (KeybindsUI.Open) return; // F1-F7 belong to the rebinder while it is capturing
 
         // Key.F1..F12 are sequential in the enum, so F1 + i indexes each row's key.
         for (int i = 0; i < Order.Length; i++)

@@ -14,17 +14,27 @@ using UnityEngine;
 // need one added purely for this.
 public class Pickup : NetworkBehaviour
 {
-    public enum Kind { Health }
+    public enum Kind { Health, Armour }
 
     [Header("Effect")]
     public Kind kind = Kind.Health;
-    [Tooltip("HP restored. 50 is a third of base health — meaningful without erasing a fight.")]
+    [Tooltip("HP restored, or armour granted. 50 health is a third of base HP — meaningful " +
+             "without erasing a fight. 50 armour is half a full plate.")]
     public float amount = 50f;
 
     [Header("Timing")]
     [Tooltip("Seconds before it returns. Long enough that taking it is worth remembering, " +
-             "which is what makes the spot contested rather than free.")]
+             "which is what makes the spot contested rather than free. Armour should sit " +
+             "LONGER than health: it is worth taking at any time, so a short timer would make " +
+             "holding its spawn the whole game.")]
     public float respawnSeconds = 20f;
+
+    [Header("Look")]
+    [Tooltip("Tint the pickup by kind at startup. Two identical boxes that do different things " +
+             "is a decision the player cannot make, because they cannot tell which is which.")]
+    public bool tintByKind = true;
+    public Color healthColor = new Color(0.35f, 0.95f, 0.45f);
+    public Color armourColor = new Color(0.40f, 0.70f, 1.00f);
 
     [Header("Feel")]
     public float radius = 1.6f;
@@ -44,6 +54,20 @@ public class Pickup : NetworkBehaviour
         visuals = GetComponentsInChildren<Renderer>(true);
         basePos = transform.position;
         available.OnChange += OnAvailableChanged;
+        if (tintByKind) ApplyTint();
+    }
+
+    void ApplyTint()
+    {
+        if (visuals == null) return;
+        Color c = kind == Kind.Armour ? armourColor : healthColor;
+        foreach (var r in visuals)
+        {
+            if (r == null) continue;
+            var m = r.material; // instance, so two pickups sharing a material stay independent
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+            m.color = c;
+        }
     }
 
     void OnDestroy() => available.OnChange -= OnAvailableChanged;
@@ -108,14 +132,27 @@ public class Pickup : NetworkBehaviour
         {
             var hp = c.GetComponentInParent<PlayerHealth>();
             if (hp == null || !hp.Alive) continue;
-            // Full health takes nothing — otherwise the resource is wasted and the spot stops
-            // being a decision.
-            if (hp.Hp >= hp.MaxHp) continue;
+            if (!Grant(hp)) continue; // already full for this kind — walk over it, take nothing
 
-            hp.Heal(amount);
             available.Value = false;
             readyAt = Time.time + respawnSeconds;
             return;
         }
+    }
+
+    // Returns false when the player cannot use it, so the pickup stays up. A resource consumed
+    // for no effect is a resource the map stopped offering — and the player has no way to know
+    // it happened.
+    bool Grant(PlayerHealth hp)
+    {
+        if (kind == Kind.Armour)
+        {
+            var armour = hp.GetComponent<PlayerArmour>();
+            return armour != null && armour.Add(amount);
+        }
+
+        if (hp.Hp >= hp.MaxHp) return false;
+        hp.Heal(amount);
+        return true;
     }
 }

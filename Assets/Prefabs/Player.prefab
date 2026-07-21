@@ -31,6 +31,9 @@ GameObject:
   - component: {fileID: 5162052341215088859}
   - component: {fileID: 9007662051478308311}
   - component: {fileID: 1906537534948185615}
+  - component: {fileID: 8084787693576391254}
+  - component: {fileID: 6896861612286790065}
+  - component: {fileID: 488909323969764933}
   m_Layer: 8
   m_Name: Player
   m_TagString: Untagged
@@ -201,7 +204,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpeedHud
   motor: {fileID: 0}
   health: {fileID: 0}
+  armour: {fileID: 0}
   weapon: {fileID: 0}
+  showNameplates: 1
+  nameplateAngle: 25
+  nameplateRange: 70
+  nameplateBlockMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  countdownPreciseUnder: 3
   maxDisplaySpeed: 20
   barWidth: 260
   barHeight: 10
@@ -404,6 +415,7 @@ MonoBehaviour:
   spawnPoint: {fileID: 0}
   killY: -10
   killDist: 48
+  attackerMemory: 5
 --- !u!114 &7834850130214077757
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -578,6 +590,14 @@ MonoBehaviour:
   killHz: 420
   damageIndicatorTime: 1.1
   damageColor: {r: 1, g: 0.25, b: 0.2, a: 0.9}
+  sameAttackerRadius: 6
+  hurtFlashTime: 0.55
+  hurtColor: {r: 0.72, g: 0.04, b: 0.03, a: 1}
+  hurtMaxAlpha: 0.62
+  hurtFullDamage: 55
+  lowHealthFraction: 0.3
+  lowHealthAlpha: 0.4
+  lowHealthPulseHz: 0.9
 --- !u!114 &5162052341215088859
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -625,6 +645,58 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TracerRenderer
   poolSize: 16
   width: 0.03
+--- !u!114 &8084787693576391254
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919031712746202489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24722e6064c6c3242bdb73ac00f13c69, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerArmour
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 1423617289288079096}
+  _networkObjectCache: {fileID: 0}
+  maxArmour: 100
+  absorbFraction: 0.6
+  clearOnDeath: 1
+--- !u!114 &6896861612286790065
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919031712746202489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2cfc5daa4039a343a91a0bab4e113f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerIdentity
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 1423617289288079096}
+  _networkObjectCache: {fileID: 0}
+--- !u!114 &488909323969764933
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919031712746202489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 94ae1020dd7c1264888f699f0b0d48b2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeathCam
+  distance: 4.2
+  height: 2.6
+  turnSpeed: 6
+  moveSpeed: 7
+  blockMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!1 &2614098738509366517
 GameObject:
   m_ObjectHideFlags: 0

@@ -23,13 +23,19 @@ public class MatchManager : NetworkBehaviour
     // map resources exist.
     readonly SyncVar<bool> pickupsEnabled = new SyncVar<bool>(false);
 
+    // Bot count, same deal: the host decides, everyone agrees. SimpleBot reads this to know
+    // whether its slot is in play.
+    readonly SyncVar<int> botCount = new SyncVar<int>(0);
+
     public bool MatchOver => winnerId.Value >= 0;
     public bool PickupsEnabled => pickupsEnabled.Value;
+    public int BotCount => botCount.Value;
 
     public override void OnStartServer()
     {
         base.OnStartServer();
         pickupsEnabled.Value = GameModeChoice.Pickups; // the host's connect-screen choice
+        botCount.Value = Mathf.Clamp(BotChoice.Count, 0, BotChoice.Max);
     }
 
     float resetAt;
@@ -77,7 +83,16 @@ public class MatchManager : NetworkBehaviour
         float w = 600f, cx = (Screen.width - w) * 0.5f, cy = Screen.height * 0.32f;
         var win = new GUIStyle(banner);
         win.normal.textColor = PlayerColors.For(winnerId.Value);
-        GUI.Label(new Rect(cx, cy, w, 56f), $"{PlayerColors.NameFor(winnerId.Value)} WINS", win);
+        GUI.Label(new Rect(cx, cy, w, 56f), $"{WinnerName()} WINS", win);
         GUI.Label(new Rect(cx, cy + 58f, w, 26f), "next round starting...", sub);
+    }
+
+    // winnerId is an OwnerId, not a name — the name lives on that player's PlayerIdentity, so
+    // it has to be looked up. Falls back to the colour if they left before the banner showed.
+    string WinnerName()
+    {
+        foreach (var p in FindObjectsByType<PlayerScore>(FindObjectsSortMode.None))
+            if (p != null && p.OwnerId == winnerId.Value) return p.Label;
+        return PlayerColors.NameFor(winnerId.Value);
     }
 }

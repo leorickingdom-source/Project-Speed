@@ -18,17 +18,40 @@ public class ConnectUI : MonoBehaviour
     public string address = "localhost";
     public ushort port = 7770;
 
-    GUIStyle label, field, button, selected;
+    GUIStyle label, field, button, selected, error;
     Texture2D panel;
     bool Started => InstanceFinder.NetworkManager != null &&
                     (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted);
 
+    // A host attempt is in flight. Without this, clicking Host again while the first attempt is
+    // still resolving subscribes OnServerState a SECOND time — and every extra subscription
+    // runs LoadChosenMap and StartConnection again once one finally succeeds.
+    bool hosting;
+
+    // Same for an explicit Client press. Tracked separately from `hosting` because hosting also
+    // starts a local client, and a host's client connecting must not be reported as a join.
+    bool joining;
+
+    // Shown on the panel when a connection attempt fails. The failure was previously silent:
+    // the server reported "port unavailable" to the console and the connect screen just sat
+    // there, so the only symptom a player sees is that the Host button does nothing.
+    string lastError;
+
     void Awake() => GameSettings.Load();
+
+    // Rebind capture has to be driven from Update — see KeybindsUI.Tick. Harmless when the
+    // panel is shut, and idempotent if GameMenu is ticking it in the same frame.
+    void Update() => KeybindsUI.Tick();
 
     void OnGUI()
     {
         var nm = InstanceFinder.NetworkManager;
         if (nm == null) return;
+
+        // Modal, and IMGUI has no notion of one: a button drawn underneath the rebinder is
+        // still clickable through it, so hosting a match is one stray click away while you are
+        // remapping. Drawing nothing else is the only way to actually block it.
+        if (KeybindsUI.Open) { KeybindsUI.Draw(); return; }
 
         if (label == null)
         {
@@ -38,9 +61,12 @@ public class ConnectUI : MonoBehaviour
             button = new GUIStyle(GUI.skin.button) { fontSize = 16 };
             selected = new GUIStyle(button) { fontStyle = FontStyle.Bold };
             selected.normal.textColor = new Color(1f, 0.9f, 0.4f);
+            error = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
+            error.normal.textColor = new Color(1f, 0.45f, 0.4f);
         }
 
-        // Once running, offer only a way out — the address is locked in by then.
+        // Once running, offer only a way out — the address is locked in by then. The rebinder
+        // is GameMenu's to draw from here on; drawing it from both would double every click.
         if (Started)
         {
             // Hidden while paused: the menu has its own Leave button, and one fewer thing
@@ -52,7 +78,10 @@ public class ConnectUI : MonoBehaviour
 
         // Opaque backing panel. Without it anything else drawing this frame bleeds through
         // and the text becomes unreadable rather than merely untidy.
-        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f;
+        // The trailing 44 is the error line's reserved space. Reserved unconditionally rather
+        // than grown on demand, so the panel does not resize under the cursor at the exact
+        // moment the player is clicking Host again.
+        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f + 44f;
         if (panel == null)
         {
             panel = new Texture2D(1, 1);
@@ -115,14 +144,23 @@ public class ConnectUI : MonoBehaviour
         // Game mode. Host-only in effect — MatchManager reads this on the server and syncs it,
         // so a client toggling it changes nothing about the match they join.
         if (GUI.Button(new Rect(330, 72, 214, 32),
-                GameModeChoice.Pickups ? "Mode: Health Pickups" : "Mode: Pure Deathmatch",
+                GameModeChoice.Pickups ? "Mode: Health + Armour" : "Mode: Pure Deathmatch",
                 GameModeChoice.Pickups ? selected : button))
             GameModeChoice.Pickups = !GameModeChoice.Pickups;
 
+        // Bots, host-only in effect like the mode above. Cycles rather than using a row of
+        // buttons because it is one number with four values and the panel has no room left.
+        if (GUI.Button(new Rect(330, 108, 214, 30), BotChoice.Describe(BotChoice.Count),
+                BotChoice.Count > 0 ? selected : button))
+            BotChoice.Count = (BotChoice.Count + 1) % (BotChoice.Max + 1);
+
         // Host = server + local client, the normal way one player hosts for others.
-        if (GUI.Button(new Rect(12, 72, 100, 32), "Host", button))
+        if (GUI.Button(new Rect(12, 72, 100, 32), hosting ? "Hosting..." : "Host", button)
+            && !hosting)
         {
             ApplyTransport(nm);
+            lastError = null;
+            hosting = true;
             // StartConnection is ASYNC: IsServerStarted is still false on the next line, and
             // LoadGlobalScenes silently refuses when the server is not up. So wait for the
             // started callback, then load the map, then connect our own client.
@@ -130,9 +168,13 @@ public class ConnectUI : MonoBehaviour
             nm.ServerManager.StartConnection();
         }
 
-        if (GUI.Button(new Rect(120, 72, 100, 32), "Client", button))
+        if (GUI.Button(new Rect(120, 72, 100, 32), joining ? "Joining..." : "Client", button)
+            && !joining)
         {
             ApplyTransport(nm);
+            lastError = null;
+            joining = true;
+            nm.ClientManager.OnClientConnectionState += OnClientState;
             nm.ClientManager.StartConnection();
         }
 
@@ -142,19 +184,66 @@ public class ConnectUI : MonoBehaviour
             ApplyTransport(nm);
             nm.ServerManager.StartConnection();
         }
+
+        if (!string.IsNullOrEmpty(lastError))
+            GUI.Label(new Rect(12, panelH - 46f, panelW - 24f, 40f), lastError, error);
+
+        // Last, so it covers the connect panel rather than fighting it for the same pixels.
+        KeybindsUI.Draw();
     }
 
     // Fires once the server socket is genuinely up. Only now can the map be registered.
+    //
+    // Also handles the FAILURE path, which used to be ignored entirely: a server that cannot
+    // bind reports Stopped, the old code returned early and left the subscription attached, and
+    // the screen said nothing at all. The common cause is the port already being in use — by
+    // another copy of the game, or by an editor session whose socket outlived play mode.
     void OnServerState(FishNet.Transporting.ServerConnectionStateArgs args)
     {
-        if (args.ConnectionState != FishNet.Transporting.LocalConnectionState.Started) return;
+        var state = args.ConnectionState;
+        if (state == FishNet.Transporting.LocalConnectionState.Starting) return;
 
         var nm = InstanceFinder.NetworkManager;
-        if (nm == null) return;
+        if (nm == null) { hosting = false; return; }
+
+        if (state != FishNet.Transporting.LocalConnectionState.Started)
+        {
+            // Stopped/Stopping without ever starting = the bind failed.
+            nm.ServerManager.OnServerConnectionState -= OnServerState;
+            hosting = false;
+            lastError = $"Could not host on port {port}. Something is already using it — " +
+                        "another copy of the game, or a previous session. Try a different port.";
+            return;
+        }
+
         nm.ServerManager.OnServerConnectionState -= OnServerState;
+        hosting = false;
 
         LoadChosenMap(nm);
         nm.ClientManager.StartConnection();
+    }
+
+    // A failed join is otherwise completely silent — the button clicks, nothing happens, and the
+    // reason (wrong address, host not up, port blocked) never reaches the person who can fix it.
+    void OnClientState(FishNet.Transporting.ClientConnectionStateArgs args)
+    {
+        var state = args.ConnectionState;
+        if (state == FishNet.Transporting.LocalConnectionState.Starting) return;
+
+        var nm = InstanceFinder.NetworkManager;
+        if (nm == null) { joining = false; return; }
+
+        if (state == FishNet.Transporting.LocalConnectionState.Started)
+        {
+            nm.ClientManager.OnClientConnectionState -= OnClientState;
+            joining = false;
+            return;
+        }
+
+        nm.ClientManager.OnClientConnectionState -= OnClientState;
+        joining = false;
+        lastError = $"Could not reach a host at {address}:{port}. Check the address and port, " +
+                    "and that the host has actually clicked Host.";
     }
 
     // Load the host's map as a global scene so joining clients receive it automatically.
@@ -190,6 +279,15 @@ public class ConnectUI : MonoBehaviour
     {
         var nm = InstanceFinder.NetworkManager;
         if (nm != null) StopAll(nm);
+
+        // Clear the in-flight flags, or a Host that was left mid-attempt leaves the button
+        // reading "Hosting..." forever with nothing behind it.
+        foreach (var ui in FindObjectsByType<ConnectUI>(FindObjectsSortMode.None))
+        {
+            if (ui == null) continue;
+            ui.hosting = false;
+            ui.joining = false;
+        }
 
         // Pause state is static, so it survives everything and has to be cleared explicitly.
         // Leaving it set was why the pause panel stayed on screen over the connect screen.

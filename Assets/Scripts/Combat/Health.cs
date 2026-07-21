@@ -1,37 +1,78 @@
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
-using System.Collections;
 
-// Simple destructible target that respawns so you can keep practicing.
-public class Health : MonoBehaviour, IDamageable
+// Destructible target that respawns so you can keep practicing. Used by the bots.
+//
+// SERVER-AUTHORITATIVE, for the same reason PlayerHealth is: this used to be a plain
+// MonoBehaviour holding a local float, so in a hosted match every client tracked its own copy
+// of a bot's health. Two players shooting the same bot each saw it die at a different moment,
+// and neither agreed with the server about whether it was there at all.
+//
+// Offline (never spawned) it keeps full local authority, so the single-player playground works
+// exactly as before — that is what HasAuthority encodes.
+public class Health : NetworkBehaviour, IDamageable
 {
     public float maxHp = 100f;
     public float respawnDelay = 3f;
 
-    float hp;
+    readonly SyncVar<float> hp = new SyncVar<float>();
+
+    public float Hp => hp.Value;
+    public bool Alive => hp.Value > 0f;
+
+    bool HasAuthority => !IsSpawned || IsServerStarted;
+
     Renderer rend;
     Collider col;
+    float reviveAt;
+    bool suppressed; // held down by something else (SimpleBot when its slot is unused)
 
     void Awake()
     {
-        hp = maxHp;
         rend = GetComponent<Renderer>();
         col = GetComponent<Collider>();
+        hp.Value = maxHp;
+        hp.OnChange += OnHpChanged;
+    }
+
+    void OnDestroy() => hp.OnChange -= OnHpChanged;
+
+    // Runs on every client, so the body disappears everywhere rather than only where the
+    // damage was applied.
+    void OnHpChanged(float prev, float next, bool asServer) => ApplyVisible(next > 0f && !suppressed);
+
+    void ApplyVisible(bool on)
+    {
+        if (rend != null) rend.enabled = on;
+        if (col != null) col.enabled = on;
+    }
+
+    public override void OnStartClient()
+    {
+        base.OnStartClient();
+        ApplyVisible(Alive && !suppressed);
+    }
+
+    // Lets the bot take itself off the board without pretending to be dead — an unused bot slot
+    // is not a corpse waiting to respawn, it is a bot that does not exist this match.
+    public void SetSuppressed(bool on)
+    {
+        suppressed = on;
+        ApplyVisible(Alive && !suppressed);
     }
 
     public void Damage(float amount)
     {
-        if (hp <= 0f) return;
-        hp -= amount;
-        if (hp <= 0f) StartCoroutine(DownThenRespawn());
+        if (!Alive || amount <= 0f || suppressed) return;
+        if (!HasAuthority) return; // clients ask the server; see PlayerNetwork.ReportHit
+        hp.Value = Mathf.Max(0f, hp.Value - amount);
+        if (hp.Value <= 0f) reviveAt = Time.time + respawnDelay;
     }
 
-    IEnumerator DownThenRespawn()
+    void Update()
     {
-        if (rend) rend.enabled = false;
-        if (col) col.enabled = false;
-        yield return new WaitForSeconds(respawnDelay);
-        hp = maxHp;
-        if (rend) rend.enabled = true;
-        if (col) col.enabled = true;
+        if (!HasAuthority || Alive || suppressed) return;
+        if (Time.time >= reviveAt) hp.Value = maxHp;
     }
 }

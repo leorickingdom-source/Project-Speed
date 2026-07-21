@@ -64,6 +64,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     PlayerMotor motor;
     PassiveLoadout passives;
+    PlayerArmour armour;                              // optional — null means no armour pool
+    DeathCam deathCam;                                // owner-only; null on remote players
     FishNet.Component.Spawning.PlayerSpawner spawner; // spawn point source, found lazily
     Vector3 spawnPos;
     Quaternion spawnRot;
@@ -71,10 +73,41 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     float lastDamageTime = -999f;
     float reviveAt;
 
+    // Where the last shot came from, recorded on THIS client (see PlayerNetwork.ShowDamageFrom,
+    // which already sends it for the damage indicator). Kept locally rather than synced because
+    // the only consumer is the local death camera, and the message already exists — a second
+    // "who killed you" RPC would be the same fact travelling twice.
+    Vector3 lastAttackerPos;
+    float lastAttackerAt = -999f;
+
+    [Tooltip("How long a recorded attacker stays valid for the death camera. Past this the " +
+             "death was probably a pit fall or someone else entirely, and pointing the camera " +
+             "at a stale position is worse than not pointing it anywhere.")]
+    public float attackerMemory = 5f;
+
+    // Local countdown, started when this client sees health hit zero. Not synced: respawnDelay
+    // is identical on every machine, so the only difference is one-way latency, and a shared
+    // clock is not worth an RPC for a number that is read as "about a second and a half".
+    float localRespawnAt;
+
+    // Seconds until this player is back, for the HUD. 0 when alive.
+    public float RespawnCountdown => Alive ? 0f : Mathf.Max(0f, localRespawnAt - Time.time);
+
+    // Called on the victim's own client from the damage report.
+    public void RecordAttacker(Vector3 worldPos)
+    {
+        lastAttackerPos = worldPos;
+        lastAttackerAt = Time.time;
+    }
+
+    bool HasFreshAttacker => Time.time - lastAttackerAt <= attackerMemory;
+
     void Awake()
     {
         motor = GetComponent<PlayerMotor>();
         passives = GetComponent<PassiveLoadout>(); // optional — null means no passives equipped
+        armour = GetComponent<PlayerArmour>();
+        deathCam = GetComponent<DeathCam>();
         if (spawnPoint != null) { spawnPos = spawnPoint.position; spawnRot = spawnPoint.rotation; }
         else { spawnPos = transform.position; spawnRot = transform.rotation; }
         hp.Value = MaxHp;
@@ -97,6 +130,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (!Alive || Invulnerable || amount <= 0f) return;
         // Clients never write health — they ask the server (see PlayerNetwork.ReportHit).
         if (!HasAuthority) return;
+        // Armour first. Every damage source in the game funnels through here — hitscan, splash,
+        // bot contact, the void — so this is the one place it has to be applied.
+        if (armour != null) amount = armour.Absorb(amount);
         hp.Value = Mathf.Max(0f, hp.Value - amount);
         lastDamageTime = Time.time;
         if (hp.Value <= 0f) Die();
@@ -150,6 +186,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     {
         PickSpawn(out Vector3 pos, out Quaternion rot);
         transform.SetPositionAndRotation(pos, rot);
+        // Armour is earned per life, not banked across them — otherwise the pickup stops being
+        // contested the moment one player has it.
+        if (armour != null) armour.ClearOnRespawn();
         hp.Value = MaxHp; // drives ApplyAliveState everywhere through OnChange
         invulnUntil = Time.time + spawnInvuln;
     }
@@ -190,8 +229,20 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         }
     }
 
+    // Runs on EVERY client through the SyncVar callback, not just the authority — which is why
+    // the local countdown and the camera hand-off belong here rather than in Die().
     void ApplyDeadState()
     {
+        localRespawnAt = Time.time + respawnDelay;
+
+        // Owner-only, and disabled on remote players by PlayerNetwork — so this is a no-op on
+        // everyone else's copy of this player.
+        if (deathCam != null && deathCam.enabled)
+        {
+            if (HasFreshAttacker) deathCam.Begin(lastAttackerPos);
+            else deathCam.Begin(null);
+        }
+
         if (motor == null) return;
         motor.velocity = Vector3.zero;
         motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
@@ -199,6 +250,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     void ApplyAliveState()
     {
+        localRespawnAt = 0f;
+        lastAttackerAt = -999f; // a new life does not inherit the last one's killer
+
+        if (deathCam != null && deathCam.enabled) deathCam.End();
+
         if (motor == null) return;
         motor.velocity = Vector3.zero;
         motor.Frozen = false;

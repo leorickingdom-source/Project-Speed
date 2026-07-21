@@ -130,6 +130,7 @@ public class PlayerNetwork : TickNetworkBehaviour
         DisableIfPresent(GetComponent<PassivePicker>());
         DisableIfPresent(GetComponent<SpeedFeel>());
         DisableIfPresent(GetComponent<HitFeedback>()); // your markers, not theirs
+        DisableIfPresent(GetComponent<DeathCam>());    // their death must not move your view
 
         // Remote players keep their body but must not render or listen.
         var cam = GetComponentInChildren<Camera>();
@@ -185,8 +186,16 @@ public class PlayerNetwork : TickNetworkBehaviour
     public void ReportHit(FishNet.Object.NetworkObject victim, float damage)
     {
         if (victim == null || damage <= 0f) return;
+
         var hp = victim.GetComponent<PlayerHealth>();
-        if (hp == null) return;
+        if (hp == null)
+        {
+            // Not a player — a bot, or anything else networked and damageable. Bots became
+            // NetworkObjects so their health is server-owned too, and without this branch every
+            // shot at one was silently dropped here and they were unkillable in a hosted match.
+            ApplyToNonPlayer(victim, damage);
+            return;
+        }
 
         bool wasAlive = hp.Alive;
         hp.Damage(damage);
@@ -210,6 +219,22 @@ public class PlayerNetwork : TickNetworkBehaviour
             var match = FindAnyObjectByType<MatchManager>();
             if (match != null) match.CheckForWinner();
         }
+    }
+
+    // Bots and other server-owned targets. No score, no damage-direction wedge — they have no
+    // owner to send one to — but the kill cue still comes back, because a bot dying is exactly
+    // as worth confirming to the shooter as a player dying.
+    void ApplyToNonPlayer(FishNet.Object.NetworkObject victim, float damage)
+    {
+        var target = victim.GetComponent<IDamageable>();
+        if (target == null) return;
+
+        var botHealth = victim.GetComponent<Health>();
+        bool wasAlive = botHealth == null || botHealth.Alive;
+
+        target.Damage(damage);
+
+        if (wasAlive && botHealth != null && !botHealth.Alive) ConfirmKill(Owner);
     }
 
     // Gunfire is the one sound that cannot be derived locally: WeaponController is disabled on
@@ -253,6 +278,12 @@ public class PlayerNetwork : TickNetworkBehaviour
     {
         var fb = GetComponent<HitFeedback>();
         if (fb != null) fb.ShowDamageFrom(worldPos);
+
+        // Same message, second consumer: the death camera needs to know who to turn towards,
+        // and this already carries exactly that. A separate "you were killed by" RPC would be
+        // the same fact crossing the wire twice.
+        var hp = GetComponent<PlayerHealth>();
+        if (hp != null) hp.RecordAttacker(worldPos);
     }
 
     [FishNet.Object.TargetRpc]

@@ -1,11 +1,25 @@
+using FishNet.Object;
 using UnityEngine;
 
-// Dumb ground chaser: walks toward the player on flat ground. Shootable via its
-// Health (respawns). Placeholder enemy for the movement playground — no nav mesh,
-// no collision avoidance yet.
+// Ground chaser: walks toward the nearest living player, gnaws on contact, lobs dodgeable
+// projectiles at range. Placeholder enemy for the movement playground — no nav mesh, no
+// collision avoidance.
+//
+// SERVER-AUTHORITATIVE. It used to be a plain MonoBehaviour, which meant every client ran its
+// own copy of the AI: three machines each moved the bot somewhere different and each applied
+// its own contact damage. Now the server alone decides where a bot is and what it does, and the
+// transform replicates. Offline it keeps full authority, so single player is unchanged.
+//
+// Targeting re-evaluates instead of latching onto the first player it ever found. The old
+// FindAnyObjectByType picked an arbitrary player once and then chased that one forever, even
+// across the map, past somebody standing next to it.
 [RequireComponent(typeof(Health))]
-public class SimpleBot : MonoBehaviour
+public class SimpleBot : NetworkBehaviour
 {
+    [Tooltip("Which bot slot this is. The host picks how many bots run; slots at or above that " +
+             "number take themselves off the board. Set 0,1,2,... per bot in the scene.")]
+    public int botIndex;
+
     public float moveSpeed = 4.5f;
     public float stopDistance = 2f;
     public float turnSpeed = 8f;
@@ -21,23 +35,55 @@ public class SimpleBot : MonoBehaviour
     public float projectileDamage = 12f;
     public LayerMask sightMask = ~0;
 
+    [Header("Targeting")]
+    [Tooltip("Seconds between target re-evaluations. Not every frame: picking the nearest " +
+             "player is a scan over everyone, and a bot that re-aims 100 times a second " +
+             "oscillates between two equidistant targets instead of committing to one.")]
+    public float retargetInterval = 0.5f;
+
+    Health health;
+    MatchManager match;
     Transform target;
     float nextFire;
+    float nextRetarget;
+    bool live = true;
 
-    void Start()
+    bool HasAuthority => !IsSpawned || IsServerStarted;
+
+    void Awake() => health = GetComponent<Health>();
+
+    // How many bots the host asked for. Read through MatchManager so it is the same number on
+    // every client — the same route Pickup uses for the pickups mode.
+    int WantedBots
     {
-        var pm = FindAnyObjectByType<PlayerMotor>();
-        if (pm != null) target = pm.transform;
+        get
+        {
+            if (match == null) match = FindAnyObjectByType<MatchManager>();
+            return match != null ? match.BotCount : BotChoice.Count;
+        }
     }
 
     void Update()
     {
-        if (target == null)
+        // Runs everywhere: whether this slot is in play is a synced decision, and every client
+        // has to hide the ones that are not.
+        bool want = botIndex < WantedBots;
+        if (want != live)
         {
-            var pm = FindAnyObjectByType<PlayerMotor>();
-            if (pm != null) target = pm.transform;
-            if (target == null) return;
+            live = want;
+            if (health != null) health.SetSuppressed(!live);
         }
+
+        if (!live || !HasAuthority) return;
+        if (health != null && !health.Alive) return;
+
+        if (Time.time >= nextRetarget)
+        {
+            nextRetarget = Time.time + retargetInterval;
+            target = FindNearestLivingPlayer();
+        }
+        if (target == null) return;
+
         Vector3 to = target.position - transform.position;
         to.y = 0f;
         float dist = to.magnitude;
@@ -64,10 +110,38 @@ public class SimpleBot : MonoBehaviour
             Vector3 aim = target.position + Vector3.up * 1.0f;
             if (CanSee(muzzle, aim))
             {
-                FireProjectile(muzzle, (aim - muzzle).normalized);
+                Vector3 dir = (aim - muzzle).normalized;
                 nextFire = Time.time + fireCooldown;
+
+                if (IsSpawned) BroadcastShot(muzzle, dir);
+                else FireProjectile(muzzle, dir);
             }
         }
+    }
+
+    // Everyone spawns the projectile so everyone SEES it — a shot that only exists on the
+    // server is damage arriving from nothing. Only the server's copy actually hurts anybody:
+    // PlayerHealth and Health both refuse writes without authority, so the client copies are
+    // pure visuals that expire on their own.
+    [ObserversRpc(RunLocally = true)]
+    void BroadcastShot(Vector3 muzzle, Vector3 dir) => FireProjectile(muzzle, dir);
+
+    // Nearest living player, so a bot fights whoever is actually near it.
+    Transform FindNearestLivingPlayer()
+    {
+        Transform best = null;
+        float bestSqr = float.MaxValue;
+
+        foreach (var p in FindObjectsByType<PlayerHealth>(FindObjectsSortMode.None))
+        {
+            if (p == null || !p.Alive) continue;
+            float d = (p.transform.position - transform.position).sqrMagnitude;
+            if (d >= bestSqr) continue;
+            bestSqr = d;
+            best = p.transform;
+        }
+
+        return best;
     }
 
     bool CanSee(Vector3 from, Vector3 to)
