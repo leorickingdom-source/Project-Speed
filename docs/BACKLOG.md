@@ -133,12 +133,42 @@ Host side, every time:
 What friends enter once (remembered afterwards, including through a settings reset):
 
 ```
-Address:  excellent-sources.gl.at.ply.gg
-Port:     46417
+Address:  69.9.191.18        (Sydney region tunnel)
+Port:     1103
 ```
 
-Tunnel must be **UDP** — Tugboat is LiteNetLib, and a TCP tunnel looks fine in the dashboard
-while never connecting. Local target `127.0.0.1:7770`.
+Use the **raw IP**, not the `washington-tarantula.aus.at.playit.plus` hostname — the
+`.playit.plus` domain was unreliable where the IP was not. Region matters a lot: the original
+`gl` (global) tunnel landed on a relay in **Oregon** at 192ms from Penang; the `aus` region is
+**Sydney** at 108ms. Region is only selectable when CREATING a tunnel, not when editing one, so
+changing it means making a new tunnel.
+
+### Two things that make a tunnel silently forward nothing
+
+Both of these produce a tunnel that resolves, pings, and accepts packets — because you are
+reaching *playit's* relay, not your machine. Nothing about the failure points at the real cause.
+
+1. **No local address set.** The tunnel must point at `127.0.0.1:7770`. A newly created tunnel
+   does not have this until you set it, and this cost an hour of misdiagnosis once already.
+2. **Wrong protocol.** Must be **UDP** — Tugboat is LiteNetLib. A TCP tunnel looks correct in the
+   dashboard and never connects.
+
+If a client cannot connect, check those two before suspecting the game, the firewall, or the
+friend's network. The fastest isolation test is to run the build **twice** on the host machine —
+one hosting, one dialling the tunnel address. That separates "tunnel misconfigured" from
+"friend's network" in about a minute, and they need completely different fixes.
+
+### The host should be where the players are
+
+Most of this group is in **Australia** while the host is in Malaysia, so every player's traffic
+crosses to Penang and back. Even a perfect Sydney relay leaves them around 130ms.
+
+**An Australian player hosting instead puts the majority at 10–40ms** and moves the distance cost
+onto the single Malaysian player, which is the right trade. They need the same build, and either
+their own `aus`-region tunnel or a direct port forward if their ISP is not CGNAT. No code changes
+— any player can host.
+
+This is worth more than any further relay tuning.
 
 Gotchas worth knowing before someone reports a "bug":
 
