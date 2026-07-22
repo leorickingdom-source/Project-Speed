@@ -167,14 +167,38 @@ approval — per-person admin forever). **Photon** (would mean replacing FishNet
 prediction/reconcile layer, which is the hardest thing already working here, to solve a
 connection-brokering problem).
 
+### Port forwarding is impossible on this connection — do not retry it
+
+The host is behind **carrier-grade NAT**. Traceroute hop 2 is `100.70.0.1`, inside the CGNAT
+range `100.64.0.0/10`. Forwarding a port on the home router works, but the ISP's NAT above it
+never forwards that port down, so inbound connections die before reaching the house.
+
+The trap: the address reported by an external "what is my IP" service (`161.142.137.96`) is
+routable and looks fine. That is the carrier's shared outer address, not the router's WAN IP.
+Checking it proves nothing. **The traceroute is the test** — a private or `100.64.x` second hop
+means CGNAT and no amount of router configuration will fix it.
+
+Consequence: every workable option must be **outbound-initiated** from the host. That is why the
+playit tunnel works at all — its agent dials out and traffic returns on that established flow, so
+inbound firewall and inbound NAT never apply.
+
+Asking the ISP for a real public IP would lift this restriction; some plans offer it on request.
+
 If it outgrows the tunnel, in order of effort:
 
-1. **Free VPS** (Oracle Cloud Always Free) running a Linux headless server. Fixed address,
-   always up, nobody's PC needed, no relay hop. **Blocked on the bug below.**
+1. **ZeroTier** — free, 25 devices on one network you own, no card. Friends install once and
+   join a network ID once; after that it behaves like a LAN. Hole-punches P2P, so a
+   Malaysia-to-Malaysia game stays in-region rather than routing via Oregon, and it works
+   through CGNAT because both ends dial out. Falls back to its own relay only if punching fails
+   (symmetric NAT), which is the one case where latency stays bad.
 2. **EOS** — free, no server to run, NAT punching with relay fallback, lobbies and join codes.
    Anonymous auth means nobody logs into anything. A transport swap, not a rewrite: FishNet and
-   the prediction layer stay untouched.
+   the prediction layer stay untouched. The "friends install nothing" option.
 3. **Steam** — best UX ("Join Game" from the overlay) but only if shipping there.
+
+**Oracle Cloud is not an option here** — signup rejection (card verification, capacity) blocked
+it in practice. Other free tiers with a Singapore region exist but are 12-month trials rather
+than always-free, so they solve this only temporarily.
 
 ### Bug: the dedicated Server path never loads a map
 
