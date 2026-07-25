@@ -31,6 +31,11 @@ public class DamageDummy : MonoBehaviour, IDamageable
     {
         rend = GetComponent<Renderer>();
         EnsureBlock();
+
+        // Same dark head cap players and bots wear, so the dummy TEACHES the head zone —
+        // it is the one target you can study at leisure, which makes it the worst place
+        // for the band to be invisible. 0.28 matches WeaponController's headFraction.
+        HeadCapVisual.Attach(transform, 0.28f, idleColor);
     }
 
     // A MaterialPropertyBlock is a plain C# object, so Unity does not serialize it across a

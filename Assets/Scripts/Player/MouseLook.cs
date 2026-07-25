@@ -13,6 +13,7 @@ public class MouseLook : MonoBehaviour
     public float maxPitch = 89f;
 
     float pitch;
+    WeaponController weapon;
 
     // Exposed so InputReader can bake facing into InputCmd — the sim reads the command, not
     // the transform, so the server can reproduce a client's movement and aim. Body only yaws,
@@ -23,6 +24,7 @@ public class MouseLook : MonoBehaviour
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();
+        if (weapon == null) weapon = GetComponent<WeaponController>();
         if (body == null) body = transform;
         if (cam == null)
         {
@@ -37,10 +39,36 @@ public class MouseLook : MonoBehaviour
         Cursor.visible = false;
     }
 
+    bool releasedForMenu;
+
     void Update()
     {
+        // While the connect screen is up the mouse belongs to the panel. Start() locks the
+        // cursor on spawn, which on the editor's scene-placed test player meant the menu was
+        // being clicked blind.
+        if (ConnectUI.MenuOpen)
+        {
+            if (!releasedForMenu)
+            {
+                releasedForMenu = true;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            return;
+        }
+        if (releasedForMenu)
+        {
+            releasedForMenu = false;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
         if (input == null || Time.timeScale == 0f) return; // frozen while paused
-        Vector2 d = input.LookDelta * sensitivity;
+        // Scoped aim is scaled by the magnification, so a given mouse movement covers the
+        // same distance on screen either way. Unscaled, zooming in would multiply your hand
+        // tremor by the same factor as the target.
+        float scale = weapon != null ? weapon.ScopeSensitivityScale : 1f;
+        Vector2 d = input.LookDelta * sensitivity * scale;
         if (body != null) body.Rotate(0f, d.x, 0f, Space.World);
         if (cam != null)
         {

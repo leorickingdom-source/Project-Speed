@@ -49,8 +49,9 @@ public class SpeedHud : MonoBehaviour
     public float countdownPreciseUnder = 3f;
 
     [Header("Speed gauge")]
-    [Tooltip("Speed the bar reads as full. 20 sits just above the dash (18) and slide ceiling (16).")]
-    public float maxDisplaySpeed = 20f;
+    [Tooltip("Speed the bar reads as full. 23 sits just above the dash (21 + gain) and slide " +
+             "ceiling (16) — a pegged bar reads as a broken bar.")]
+    public float maxDisplaySpeed = 23f;
     public float barWidth = 260f;
     public float barHeight = 10f;
     [Tooltip("Bottom margin in pixels.")]
@@ -72,6 +73,8 @@ public class SpeedHud : MonoBehaviour
         public string text;
         public Color tint;
         public float alpha;
+        public float hpFrac;      // 0..1 of their max HP, -1 when unknown
+        public float armourFrac;  // 0..1 of a full plate, 0 when they have none
     }
 
     readonly System.Collections.Generic.List<Plate> plates = new System.Collections.Generic.List<Plate>();
@@ -83,6 +86,11 @@ public class SpeedHud : MonoBehaviour
     // Smoothed, because raw RTT jitters by tens of milliseconds between samples and a number
     // that flickers is one nobody reads. -1 means "no sample yet".
     float shownPing = -1f;
+
+    // Health "pop": the number swells for a beat when it DROPS, so damage registers in
+    // peripheral vision even when the vignette is missed. -1 = no reading yet.
+    float lastHpSeen = -1f;
+    float hpPopUntil;
 
     void Awake()
     {
@@ -107,13 +115,15 @@ public class SpeedHud : MonoBehaviour
 
     void RefreshPing()
     {
-        if (!showPing || !FishNet.InstanceFinder.IsClientStarted)
+        // NetPresence, never InstanceFinder: the latter log-spams every access it cannot
+        // resolve, and this runs per frame — see NetPresence for the 25 GB Editor.log story.
+        if (!showPing || !NetPresence.IsClientStarted)
         {
             shownPing = -1f;
             return;
         }
 
-        var tm = FishNet.InstanceFinder.TimeManager;
+        var tm = NetPresence.Manager.TimeManager;
         if (tm == null) { shownPing = -1f; return; }
 
         float rtt = tm.RoundTripTime;
@@ -169,6 +179,16 @@ public class SpeedHud : MonoBehaviour
             var hp = id.GetComponent<PlayerHealth>();
             if (hp != null && !hp.Alive) continue;
 
+            // Their health, read straight off the synced value every client already has.
+            // Worth showing because this game's kill times are short and its weapons are
+            // committal: "can I finish them before they turn the corner" is the decision that
+            // actually happens, and it was previously unanswerable except by guessing.
+            float hpFrac = -1f, armourFrac = 0f;
+            if (hp != null && hp.MaxHp > 0f) hpFrac = Mathf.Clamp01(hp.Hp / hp.MaxHp);
+            var ar = id.GetComponent<PlayerArmour>();
+            if (ar != null && ar.HasArmour && ar.MaxArmour > 0f)
+                armourFrac = Mathf.Clamp01(ar.Points / ar.MaxArmour);
+
             Vector3 head = id.transform.position + Vector3.up * 1.25f;
             Vector3 to = head - eye;
             float distSqr = to.sqrMagnitude;
@@ -203,6 +223,8 @@ public class SpeedHud : MonoBehaviour
                 text = id.Name,
                 tint = id.Tint,
                 alpha = a,
+                hpFrac = hpFrac,
+                armourFrac = armourFrac,
             });
         }
     }
@@ -221,6 +243,29 @@ public class SpeedHud : MonoBehaviour
             c.a = p.alpha;
             plateStyle.normal.textColor = c;
             GUI.Label(new Rect(p.pos.x - 130f, p.pos.y - 34f, 260f, 24f), p.text, plateStyle);
+
+            if (p.hpFrac < 0f) continue;
+
+            // Bar under the name, fading with it. Colour-coded like your own health so the
+            // reading transfers: white healthy, amber hurt, red nearly dead.
+            const float bw = 74f, bh = 5f;
+            float bx = p.pos.x - bw * 0.5f, by = p.pos.y - 10f;
+            Box(bx - 1f, by - 1f, bw + 2f, bh + 2f, new Color(0f, 0f, 0f, 0.5f * p.alpha));
+
+            Color fill = p.hpFrac > 0.6f ? new Color(0.9f, 0.95f, 1f)
+                       : p.hpFrac > 0.3f ? new Color(1f, 0.8f, 0.35f)
+                       : new Color(1f, 0.4f, 0.35f);
+            fill.a = p.alpha;
+            Box(bx, by, bw * p.hpFrac, bh, fill);
+
+            // Armour rides above it as a thinner strip — the reason your shots are landing
+            // for less than the number says.
+            if (p.armourFrac > 0f)
+            {
+                var at = ArmourTint;
+                at.a = p.alpha;
+                Box(bx, by - 4f, bw * p.armourFrac, 2.5f, at);
+            }
         }
     }
 
@@ -234,6 +279,9 @@ public class SpeedHud : MonoBehaviour
     void OnGUI()
     {
         if (motor == null || GameMenu.IsPaused || KeybindsUI.Open) return;
+        // The connect screen owns the display before a match — the speed gauge and health
+        // readout were drawing straight over it.
+        if (ConnectUI.MenuOpen) return;
         if (big == null)
         {
             big = new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold };
@@ -266,10 +314,33 @@ public class SpeedHud : MonoBehaviour
         // --- health (left) and ammo (right), the two numbers a player actually needs ---
         if (health != null)
         {
+            // Playtest: "make health more obvious". Three changes, all to the same number:
+            // it is coloured by state (white / amber under 60% / red under 30%), it swells
+            // for a beat when it drops, and a slim bar underneath makes the LEVEL readable
+            // without reading digits at all.
+            if (lastHpSeen >= 0f && health.Hp < lastHpSeen - 0.01f)
+                hpPopUntil = Time.time + 0.3f;
+            lastHpSeen = health.Hp;
+
+            float frac = health.MaxHp > 0f ? health.Hp / health.MaxHp : 1f;
+            var hpStyle = new GUIStyle(big);
+            hpStyle.normal.textColor = frac > 0.6f ? Color.white
+                                     : frac > 0.3f ? new Color(1f, 0.8f, 0.35f)
+                                     : new Color(1f, 0.4f, 0.35f);
+            if (Time.time < hpPopUntil) hpStyle.fontSize = 42;
+
             string hp = health.Alive ? $"{health.Hp:0}" : "DEAD";
-            GUI.Label(new Rect(28f, sh - bottomMargin - 42f, 220f, 42f), hp, big);
+            GUI.Label(new Rect(28f, sh - bottomMargin - 46f, 220f, 46f), hp, hpStyle);
+
+            if (health.Alive)
+            {
+                Box(28f, sh - bottomMargin - 4f, 80f, 5f, new Color(0f, 0f, 0f, 0.45f));
+                Box(28f, sh - bottomMargin - 4f, 80f * Mathf.Clamp01(frac), 5f,
+                    hpStyle.normal.textColor);
+            }
+
             if (health.Alive && health.Invulnerable)
-                GUI.Label(new Rect(28f, sh - bottomMargin - 64f, 220f, 22f), "invulnerable", dim);
+                GUI.Label(new Rect(28f, sh - bottomMargin - 68f, 220f, 22f), "invulnerable", dim);
         }
 
         // Armour sits beside health rather than replacing it, and only appears when you have
@@ -289,12 +360,34 @@ public class SpeedHud : MonoBehaviour
 
         if (weapon != null)
         {
-            string ammo = weapon.Reloading ? "reloading" : $"{weapon.CurrentAmmo} / {weapon.CurrentMag}";
-            var r = new Rect(sw - 268f, sh - bottomMargin - 42f, 240f, 42f);
+            // Ammo colours by how empty the mag is, for the same reason health does: the
+            // number was always there, but a number you must read is a number you skip
+            // mid-fight. Amber at a fifth left, red when dry.
+            float magFrac = weapon.CurrentMag > 0 ? (float)weapon.CurrentAmmo / weapon.CurrentMag : 1f;
             var right = new GUIStyle(big) { alignment = TextAnchor.MiddleRight };
-            GUI.Label(r, ammo, right);
+            right.normal.textColor = weapon.CurrentIsAmmoless ? Color.white
+                                   : weapon.Reloading ? new Color(1f, 0.8f, 0.35f)
+                                   : weapon.CurrentAmmo <= 0 ? new Color(1f, 0.4f, 0.35f)
+                                   : magFrac <= 0.2f ? new Color(1f, 0.8f, 0.35f)
+                                   : Color.white;
+
+            string ammo = weapon.Reloading ? "reloading"
+                        : weapon.CurrentIsAmmoless ? "—"
+                        : $"{weapon.CurrentAmmo} / {weapon.CurrentMag}";
+            GUI.Label(new Rect(sw - 268f, sh - bottomMargin - 42f, 240f, 42f), ammo, right);
             var rightSmall = new GUIStyle(small) { alignment = TextAnchor.MiddleRight };
             GUI.Label(new Rect(sw - 268f, sh - bottomMargin - 66f, 240f, 22f), weapon.CurrentName, rightSmall);
+
+            // Reload progress AT THE CROSSHAIR, where the eyes actually are. The corner text
+            // says you are reloading; this says how much longer — which is the number that
+            // decides peek-now-or-wait, the whole reason anyone looks.
+            if (weapon.Reloading && (health == null || health.Alive))
+            {
+                float reloadT = weapon.ReloadProgress01;
+                float bw = 64f, bx = (sw - bw) * 0.5f, by = sh * 0.5f + 18f;
+                Box(bx - 1f, by - 1f, bw + 2f, 6f, new Color(0f, 0f, 0f, 0.55f));
+                Box(bx, by, bw * reloadT, 4f, new Color(1f, 0.8f, 0.35f, 0.95f));
+            }
         }
 
         DrawMobilityPerk(barX, barY);
@@ -304,12 +397,39 @@ public class SpeedHud : MonoBehaviour
         // Crosshair, but not while dead: the death camera is third person, so a centre dot
         // would sit in mid-air pointing at nothing and imply you can still shoot.
         bool dead = health != null && !health.Alive;
-        if (!dead)
+        // Only a TRUE scope gets the banded overlay. The Revolver and Rifle zoom slightly for
+        // readability, and letterboxing the screen for a 1.4x lean would read as a far bigger
+        // commitment than it is — they keep the normal crosshair.
+        bool scoped = !dead && weapon != null && weapon.Scoped
+                      && weapon.CurrentWeapon != null && weapon.CurrentWeapon.scopeFov <= 45f;
+        if (scoped) DrawScopeOverlay(sw, sh);
+        else if (!dead)
             GUI.DrawTexture(new Rect(sw * 0.5f - 2f, sh * 0.5f - 2f, 4f, 4f), Texture2D.whiteTexture);
         else
             DrawRespawnCountdown(sw, sh);
 
         if (showDebug) DrawDebug();
+    }
+
+    // Scoped view: dark bands squeezing the frame plus fine cross hairs. The FOV change alone
+    // is ambiguous — it looks like the speed FOV curve, which moves constantly — so the scope
+    // needs a shape on screen that only ever means "scoped".
+    void DrawScopeOverlay(float sw, float sh)
+    {
+        float band = sh * 0.14f;
+        var dark = new Color(0f, 0f, 0f, 0.72f);
+        Box(0f, 0f, sw, band, dark);
+        Box(0f, sh - band, sw, band, dark);
+        Box(0f, band, sw * 0.16f, sh - band * 2f, dark);
+        Box(sw - sw * 0.16f, band, sw * 0.16f, sh - band * 2f, dark);
+
+        float cx = sw * 0.5f, cy = sh * 0.5f;
+        var line = new Color(0.85f, 0.95f, 1f, 0.9f);
+        Box(cx - 60f, cy - 0.5f, 44f, 1f, line);   // left
+        Box(cx + 16f, cy - 0.5f, 44f, 1f, line);   // right
+        Box(cx - 0.5f, cy - 60f, 1f, 44f, line);   // top
+        Box(cx - 0.5f, cy + 16f, 1f, 44f, line);   // bottom
+        Box(cx - 1f, cy - 1f, 2f, 2f, line);       // centre pip
     }
 
     static readonly Color ArmourTint = new Color(0.45f, 0.72f, 1f);

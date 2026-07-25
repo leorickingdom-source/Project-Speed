@@ -105,6 +105,11 @@ public class PlayerNetwork : TickNetworkBehaviour
                 var m = rend.material;              // instance, per player
                 if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
                 m.color = c;
+
+                // Dark cap over the headshot band, so "aim for the head" is a place you can
+                // SEE rather than a rule you memorise. Sized from the same headFraction the
+                // damage code uses — if the band is retuned, the paint moves with it.
+                if (!IsOwner) AddHeadCap(body, c);
             }
         }
 
@@ -113,7 +118,7 @@ public class PlayerNetwork : TickNetworkBehaviour
             // Apply the weapon picked on the connect screen. Owner-only: it's a local choice,
             // and remote players never render your tracers anyway.
             var wc = GetComponent<WeaponController>();
-            if (wc != null) wc.SetLockedWeapon(LoadoutChoice.WeaponIndex);
+            if (wc != null) wc.SetLockedWeapon(LoadoutChoice.SelectedSlot);
             // The F1-F7 runtime picker is an offline testing tool. Both loadouts are locked
             // once networked, and leaving it visible would suggest otherwise.
             DisableIfPresent(GetComponent<PassivePicker>());
@@ -140,6 +145,13 @@ public class PlayerNetwork : TickNetworkBehaviour
     static void DisableIfPresent(MonoBehaviour mb)
     {
         if (mb != null) mb.enabled = false;
+    }
+
+    // Delegates to the shared helper so players and bots stay identical — see HeadCapVisual.
+    void AddHeadCap(Transform body, Color bodyColor)
+    {
+        var wc = GetComponent<WeaponController>();
+        HeadCapVisual.Attach(body, wc != null ? wc.headFraction : 0.28f, bodyColor);
     }
 
     protected override void TimeManager_OnTick() => PerformReplicate(BuildMoveData());
@@ -183,7 +195,7 @@ public class PlayerNetwork : TickNetworkBehaviour
     // alternative (server-side raycast with lag compensation) is a much larger job. Swap
     // this out before anything competitive.
     [FishNet.Object.ServerRpc]
-    public void ReportHit(FishNet.Object.NetworkObject victim, float damage)
+    public void ReportHit(FishNet.Object.NetworkObject victim, float damage, KillKind kind)
     {
         if (victim == null || damage <= 0f) return;
 
@@ -197,31 +209,26 @@ public class PlayerNetwork : TickNetworkBehaviour
             return;
         }
 
-        bool wasAlive = hp.Alive;
         // Recorded BEFORE the damage lands, so if this hit kills them PlayerHealth.Die already
         // knows who to credit. Die is the one place the kill feed is announced from.
-        hp.RecordServerAttacker(base.NetworkObject);
-        hp.Damage(damage);
+        hp.RecordServerAttacker(base.NetworkObject, kind);
 
         // Point the victim back at us. Sent from the victim's own PlayerNetwork so the TargetRpc
         // reaches their client, with our position as the source.
+        //
+        // Sent BEFORE the damage is applied, on purpose: if this hit kills, the health SyncVar
+        // races this RPC to the victim's client, and the death camera reads whichever attacker
+        // record it has when the death lands. Queuing the report first makes the common case
+        // arrive in the right order; DeathCam.Retarget covers the rest.
         var victimNet = victim.GetComponent<PlayerNetwork>();
         if (victimNet != null && victim.Owner != null)
             victimNet.ShowDamageFrom(victim.Owner, transform.position, base.NetworkObject);
 
-        // Only the server knows whether that killed them — health is server-owned — so the
-        // kill cue has to come back to the shooter rather than being guessed locally.
-        if (wasAlive && !hp.Alive)
-        {
-            ConfirmKill(Owner);
-            // Credit the kill here rather than in PlayerHealth: only this path knows WHO did
-            // it. Deaths are counted in PlayerHealth so pit falls and out-of-bounds count too.
-            var mine = GetComponent<PlayerScore>();
-            if (mine != null) mine.AddKill();
+        hp.Damage(damage);
 
-            var match = FindAnyObjectByType<MatchManager>();
-            if (match != null) match.CheckForWinner();
-        }
+        // Kill credit, the kill cue and the win check all moved to PlayerHealth.Die: the
+        // attacker is recorded above BEFORE the damage, so Die knows the killer for EVERY
+        // path — this RPC, rocket splash, whatever comes next — instead of only for hitscan.
     }
 
     // Bots and other server-owned targets. No score, no damage-direction wedge — they have no
@@ -264,6 +271,39 @@ public class PlayerNetwork : TickNetworkBehaviour
         var a = GetComponent<PlayerAudio>();
         if (a != null) a.PlayFire(weaponIndex);
     }
+
+    // A client's rocket is only a visual on its own machine — every Damage/impulse write it
+    // makes is authority-refused. The server spawns the REAL one here (its writes stick,
+    // including the knockback that reconcile then delivers to the victims), and relays a
+    // visual to everyone who is neither the shooter (already has one) nor the server.
+    [FishNet.Object.ServerRpc]
+    public void ReportRocket(Vector3 origin, Vector3 dir, int weaponIndex, float damageScale)
+    {
+        var wc = GetComponent<WeaponController>();
+        if (wc == null) return;
+        wc.SpawnRocket(origin, dir, weaponIndex, damageScale);
+        BroadcastRocket(origin, dir, weaponIndex, damageScale);
+    }
+
+    [FishNet.Object.ObserversRpc(ExcludeOwner = true)]
+    void BroadcastRocket(Vector3 origin, Vector3 dir, int weaponIndex, float damageScale)
+    {
+        if (IsServerStarted) return; // the host machine already runs the authoritative copy
+        var wc = GetComponent<WeaponController>();
+        if (wc != null) wc.SpawnRocket(origin, dir, weaponIndex, damageScale);
+    }
+
+    // Rocket pickup collected — the server decides who got it (MatchManager), but ammo lives
+    // client-side on the owner's WeaponController, so the grant has to travel to them.
+    [FishNet.Object.TargetRpc]
+    public void GrantRockets(FishNet.Connection.NetworkConnection conn, int rockets)
+    {
+        var wc = GetComponent<WeaponController>();
+        if (wc != null) wc.GiveRocket(rockets);
+    }
+
+    // Lets PlayerHealth.Die (server-side) send the kill cue to whoever killed its player.
+    public void NotifyKillConfirmed() => ConfirmKill(Owner);
 
     // Shot lines for everyone else. Without this an enemy could fire at you from across the
     // map with nothing at all on screen — WeaponController is disabled on non-owners, so its

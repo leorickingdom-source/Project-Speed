@@ -21,12 +21,16 @@ public class HitFeedback : MonoBehaviour
     public float markerLength = 6f;
     public float markerThickness = 2f;
     public Color hitColor = new Color(1f, 1f, 1f, 0.95f);
+    public Color headshotColor = new Color(1f, 0.85f, 0.35f, 1f);
     public Color killColor = new Color(1f, 0.35f, 0.3f, 1f);
 
     [Header("Audio")]
     [Range(0f, 1f)] public float volume = 0.35f;
-    [Tooltip("Hit blip pitch (Hz). The kill blip drops below this so the two never blur.")]
+    [Tooltip("Hit blip pitch (Hz). The kill blip drops below this so the two never blur. The " +
+             "headshot blip sits ABOVE it — higher reads as sharper, and the three cues have " +
+             "to be tellable apart by ear alone in a fight you cannot look away from.")]
     public float hitHz = 1000f;
+    public float headshotHz = 1500f;
     public float killHz = 420f;
 
     [Header("Damage direction")]
@@ -63,9 +67,10 @@ public class HitFeedback : MonoBehaviour
     readonly DamageMark[] marks = new DamageMark[MaxMarks];
 
     AudioSource audioSrc;
-    AudioClip hitClip, killClip;
+    AudioClip hitClip, headshotClip, killClip;
     float markerUntil;
     bool lastWasKill;
+    bool lastWasHeadshot;
     Texture2D pixel;
     Texture2D vignette;
 
@@ -82,6 +87,7 @@ public class HitFeedback : MonoBehaviour
         audioSrc.spatialBlend = 0f; // 2D — this is UI feedback, not a world sound
 
         hitClip = MakeBlip(hitHz, 0.06f, 60f);
+        headshotClip = MakeBlip(headshotHz, 0.08f, 45f); // a touch longer, so it lands harder
         killClip = MakeBlip(killHz, 0.18f, 18f);
 
         pixel = new Texture2D(1, 1);
@@ -103,11 +109,20 @@ public class HitFeedback : MonoBehaviour
     // Called by WeaponController the moment a damaging hit is detected locally. Fired on the
     // shooter's own machine on purpose: waiting for the server to confirm would add a full
     // round-trip of delay to the one cue that has to feel instant.
-    public void ShowHit()
+    //
+    // Headshots get a sharper, higher blip and a gold marker. The playtest read of the SMG and
+    // shotgun as "not rewarding" is partly this channel: when every hit sounds identical, ten
+    // good hits feel like noise. Distinguishing the BEST hit gives the spray weapons their
+    // payoff moments too.
+    public void ShowHit(KillKind kind = KillKind.Normal)
     {
         markerUntil = Time.time + markerTime;
         lastWasKill = false;
-        if (audioSrc != null && hitClip != null) audioSrc.PlayOneShot(hitClip, volume);
+        lastWasHeadshot = kind == KillKind.Headshot;
+        // Melee borrows the headshot blip: both are "you did the hard thing", and a fourth
+        // distinct tone in the same 100ms window would be noise rather than information.
+        var clip = kind == KillKind.Normal ? hitClip : headshotClip;
+        if (audioSrc != null && clip != null) audioSrc.PlayOneShot(clip, volume);
     }
 
     // Called from the server's confirmation (see PlayerNetwork.ConfirmKill) — the shooter
@@ -116,6 +131,7 @@ public class HitFeedback : MonoBehaviour
     {
         markerUntil = Time.time + killMarkerTime;
         lastWasKill = true;
+        lastWasHeadshot = false;
         if (audioSrc != null && killClip != null) audioSrc.PlayOneShot(killClip, volume);
     }
 
@@ -310,7 +326,7 @@ public class HitFeedback : MonoBehaviour
 
         // Four ticks angling out from the crosshair — the classic shape, and readable against
         // any background because it is offset from centre rather than drawn over it.
-        GUI.color = lastWasKill ? killColor : hitColor;
+        GUI.color = lastWasKill ? killColor : lastWasHeadshot ? headshotColor : hitColor;
         float cx = Screen.width * 0.5f, cy = Screen.height * 0.5f;
         float s = markerSpread, L = markerLength, T = markerThickness;
 

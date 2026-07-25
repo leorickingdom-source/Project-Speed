@@ -53,7 +53,16 @@ public class SimpleBot : NetworkBehaviour
 
     bool HasAuthority => !IsSpawned || IsServerStarted;
 
-    void Awake() => health = GetComponent<Health>();
+    void Awake()
+    {
+        health = GetComponent<Health>();
+
+        // Same dark head cap players wear, so "aim for the head" is learnable on bots — the
+        // safe targets — before it has to be executed on people. 0.28 matches the
+        // WeaponController default headFraction; bots carry no WeaponController to read it from.
+        var rend = GetComponent<Renderer>();
+        if (rend != null) HeadCapVisual.Attach(transform, 0.28f, rend.material.color);
+    }
 
     // How many bots the host asked for. Read through MatchManager so it is the same number on
     // every client — the same route Pickup uses for the pickups mode.

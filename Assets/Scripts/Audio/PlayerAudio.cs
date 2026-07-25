@@ -4,11 +4,16 @@ using UnityEngine;
 // AudioSource — so distance and direction carry, which is the entire point: you should be
 // able to hear where someone is without seeing them.
 //
-// Footsteps, jumps and landings are DERIVED from the motor rather than networked. Remote
-// players already move correctly through prediction, so watching their replicated motion is
-// enough to know when they stepped or landed. That means enemy movement audio costs no
-// bandwidth at all. Only weapon fire needs an explicit message, because WeaponController is
-// disabled on non-owners and nothing else reveals a shot.
+// Jumps and landings are DERIVED from the motor rather than networked. Remote players
+// already move correctly through prediction, so watching their replicated motion is enough
+// to know when they landed. That means enemy movement audio costs no bandwidth at all. Only
+// weapon fire needs an explicit message, because WeaponController is disabled on non-owners
+// and nothing else reveals a shot.
+//
+// Footsteps REMOVED after playtest. In a game where everyone runs at 9+ m/s permanently,
+// steps are not information — they are a metronome that never stops, and they buried the
+// sounds that do carry meaning (jumps, landings, dashes, gunfire). Landings still give away
+// position, and they fire exactly when something HAPPENED.
 [RequireComponent(typeof(PlayerMotor))]
 public class PlayerAudio : MonoBehaviour
 {
@@ -18,21 +23,14 @@ public class PlayerAudio : MonoBehaviour
              "60 lets you hear most of it while still fading with distance.")]
     public float maxDistance = 60f;
 
-    [Header("Footsteps")]
-    [Tooltip("Metres travelled between steps. Cadence follows speed automatically because " +
-             "it is distance-based, not time-based.")]
-    public float stepDistance = 2.6f;
-    [Tooltip("Below this speed you are considered to be sneaking and make no step sound.")]
-    public float minStepSpeed = 2f;
-
     PlayerMotor motor;
     AudioSource src;
-    AudioClip step, land, jump, dashClip, grappleOn, grappleOff, fireLow, fireHigh;
+    AudioClip land, jump, dashClip, grappleOn, grappleOff, fireLow, fireHigh, meleeSwing;
 
-    float stepAccum;
     bool wasGrounded;
     bool wasGrappled;
     float lastDashCooldown;
+    int lastAirJumps = -1;
     GrappleHook grapple;
 
     void Awake()
@@ -48,7 +46,6 @@ public class PlayerAudio : MonoBehaviour
         src.maxDistance = maxDistance;
         src.dopplerLevel = 0f;                 // off: fast movement would warp pitch constantly
 
-        step = ProceduralAudio.Noise("step", 0.07f, 55f, 0.35f);
         land = ProceduralAudio.Noise("land", 0.16f, 26f, 0.6f);
         jump = ProceduralAudio.Sweep("jump", 220f, 420f, 0.10f, 26f, 0.35f);
         dashClip = ProceduralAudio.Sweep("dash", 700f, 180f, 0.20f, 14f, 0.45f);
@@ -56,6 +53,9 @@ public class PlayerAudio : MonoBehaviour
         grappleOff = ProceduralAudio.Tone("grapOff", 380f, 0.10f, 34f, 0.3f);
         fireLow = ProceduralAudio.Noise("fireLow", 0.13f, 40f, 0.55f);
         fireHigh = ProceduralAudio.Noise("fireHigh", 0.06f, 70f, 0.4f);
+        // A downward whoosh, unlike every gunshot in the game — melee is an instant kill, so
+        // hearing one behind you has to be instantly distinguishable from being shot at.
+        meleeSwing = ProceduralAudio.Sweep("melee", 520f, 130f, 0.16f, 18f, 0.5f);
 
         wasGrounded = motor.grounded;
     }
@@ -69,10 +69,15 @@ public class PlayerAudio : MonoBehaviour
 
     // Called by WeaponController on the owner, and by PlayerNetwork on everyone else when the
     // fire message arrives. Heavier weapons get a lower pitch so shots are identifiable by ear.
+    public void PlayMelee() => Play(meleeSwing, Random.Range(0.95f, 1.05f), 1.1f);
+
     public void PlayFire(int weaponIndex)
     {
         switch (weaponIndex)
         {
+            // Melee rides the fire message rather than owning a second RPC that says the
+            // same thing — see WeaponController.MeleeAudioIndex.
+            case WeaponController.MeleeAudioIndex: PlayMelee(); break;
             case 2: Play(fireLow, 0.55f, 1.1f); break;  // Sniper — deep, carries
             case 4: Play(fireLow, 0.8f, 1.0f); break;   // Shotgun — full-bodied
             case 3: Play(fireHigh, 1.25f, 0.55f); break;// SMG — thin and fast
@@ -96,7 +101,6 @@ public class PlayerAudio : MonoBehaviour
         {
             float impact = Mathf.InverseLerp(2f, 18f, Mathf.Abs(motor.velocity.y));
             Play(land, Random.Range(0.92f, 1.08f), 0.5f + impact * 0.8f);
-            stepAccum = 0f;
         }
         else if (!g && wasGrounded)
         {
@@ -104,28 +108,21 @@ public class PlayerAudio : MonoBehaviour
         }
         wasGrounded = g;
 
-        // Footsteps by DISTANCE travelled, so cadence speeds up naturally with movement and
-        // stays silent when you are barely moving.
-        if (g && motor.Speed > minStepSpeed && !motor.sliding)
-        {
-            stepAccum += motor.Speed * Time.deltaTime;
-            if (stepAccum >= stepDistance)
-            {
-                stepAccum -= stepDistance;
-                Play(step, Random.Range(0.9f, 1.15f), 0.9f);
-            }
-        }
-        else if (!g)
-        {
-            stepAccum = 0f;
-        }
-
         // Dash, inferred from the cooldown jumping back up to full. Derived rather than pushed
         // from PlayerMotor so the deterministic sim keeps no audio dependency — and it covers
         // remote players for free, since their cooldown replicates with the rest of the state.
+        // Louder than any footstep (playtest: bursts under-read) — a dash is a statement.
         float cd = motor.DashCooldownLeft;
-        if (cd > lastDashCooldown + 0.01f) Play(dashClip, Random.Range(0.95f, 1.05f), 0.9f);
+        if (cd > lastDashCooldown + 0.01f) Play(dashClip, Random.Range(0.95f, 1.05f), 1.15f);
         lastDashCooldown = cd;
+
+        // Air jump, same derived pattern (AirJumpsLeft replicates with the motor state). The
+        // ground-leave edge above never fires for it — you are already airborne — so without
+        // this the double jump was the one movement verb with NO sound at all. Higher pitch
+        // than a ground jump: same family, clearly the special one.
+        int aj = motor.AirJumpsLeft;
+        if (lastAirJumps >= 0 && aj < lastAirJumps) Play(jump, 1.35f, 1.0f);
+        lastAirJumps = aj;
 
         // Grapple attach / release, read off the hook's own state so it covers remote players.
         if (grapple != null)

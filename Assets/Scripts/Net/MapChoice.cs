@@ -3,7 +3,7 @@
 // in a different map from the one it is playing in.
 public static class MapChoice
 {
-    public static readonly string[] Names = { "Arena", "Stacks" };
+    public static readonly string[] Names = { "Arena", "Stacks", "Expanse" };
 
     // Index into Names. Arena default — it is the entry scene and the more forgiving space.
     public static int Index = 0;
@@ -17,6 +17,7 @@ public static class MapChoice
         {
             case 0: return "Arena - 90x90, open, long sightlines and a lethal central pit. Favours range.";
             case 1: return "Stacks - 56x56, vertical, solid centre pillar. Short fights, no cross-map shots.";
+            case 2: return "Expanse - 150x150, four plateaus and a raised centre. Built for Flashpoint: long races, pads everywhere.";
             default: return "";
         }
     }

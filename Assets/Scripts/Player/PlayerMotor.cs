@@ -46,16 +46,27 @@ public class PlayerMotor : MonoBehaviour
     [Tooltip("Speed the dash brings you UP TO — a floor, not an additive kick. From a walk " +
              "(9) it is a huge gain; already at 16 it is nearly nothing. Deliberately a " +
              "catch-up tool rather than a snowball one, so it cannot compound with movement " +
-             "skill. Above this speed a dash is a free instant REDIRECT and adds nothing.")]
-    public float dashSpeed = 18f;
+             "skill. Above this speed a dash is a free instant REDIRECT and adds nothing. " +
+             "21 after two playtest rounds (18 -> 19 -> 21) asking for more physical punch; " +
+             "the HUD gauge ceiling moved to 23 to keep the dash off the peg.")]
+    public float dashSpeed = 21f;
     [Tooltip("Seconds between dashes. Fixed rather than refreshed on landing: landing-reset " +
              "would hand a bhopping expert several times the dashes of a new player, stacking " +
-             "a resource gap on top of an execution gap.")]
-    public float dashCooldown = 1.5f;
+             "a resource gap on top of an execution gap. 1.5 -> 1.1 -> 0.9 across playtests: " +
+             "at 0.9 the dash is nearly a rhythm tool — still not free (a missed dash is " +
+             "still a second of exposure), but frequent enough to be part of normal movement.")]
+    public float dashCooldown = 0.9f;
     [Tooltip("Seconds of friction immunity after a dash. Without it, ground friction bleeds an " +
              "18 m/s dash back to groundSpeed in ~87ms (ln(2)/friction) and a ground dash is " +
              "imperceptible — only air dashes survive, because air has no friction.")]
-    public float dashGrace = 0.35f;
+    public float dashGrace = 0.45f;
+    [Tooltip("Guaranteed speed GAINED by a dash even when already above dashSpeed. The pure " +
+             "floor meant a dash at speed changed nothing — physically true to the no-" +
+             "snowball rule, but it made the button feel broken (playtest: 'no difference on " +
+             "forward dash'). +5 (was +3, playtest asked for more) is a real lunge at any " +
+             "speed; friction and the cooldown still bleed most of it back between dashes, " +
+             "so chaining dashes drifts upward slowly rather than compounding.")]
+    public float dashGain = 5f;
 
     [Header("Jump / gravity")]
     public float gravity = 22f;
@@ -64,8 +75,27 @@ public class PlayerMotor : MonoBehaviour
     [Tooltip("Air jumps allowed by the DoubleJump passive, refunded on landing.")]
     public int airJumpCount = 1;
     [Tooltip("Upward speed of an air jump. Set flat rather than added to current velocity so " +
-             "it rescues a fall predictably instead of doing nothing when you're dropping fast.")]
-    public float airJumpForce = 7.5f;
+             "it rescues a fall predictably instead of doing nothing when you're dropping fast. " +
+             "10 after two playtest rounds (7.5 -> 8.5 -> 10) — visibly ABOVE the ground " +
+             "jump's 8, so the second jump reads as the feature it costs a passive slot to have.")]
+    public float airJumpForce = 10f;
+    [Header("Wall jump (baseline, everyone has it)")]
+    [Tooltip("Upward speed of a wall kick. Slightly under the ground jump: a wall is a route, " +
+             "not a better staircase.")]
+    public float wallJumpUp = 7.5f;
+    [Tooltip("Speed floor pushed away from the wall. High enough that the kick CLEARS the " +
+             "surface — a wall jump that leaves you scraping the same wall is a stall.")]
+    public float wallJumpPush = 11f;
+    [Tooltip("How far from the capsule a wall counts as kickable.")]
+    public float wallJumpReach = 1.1f;
+    [Tooltip("Kicks allowed per airtime, refunded on landing. Two is a corner: in and out.")]
+    public int wallJumpCount = 2;
+
+    [Tooltip("Horizontal speed ADDED by an air jump on top of the redirect. The dash's " +
+             "dashGain, applied to the double jump for the same reason: a redirect that " +
+             "keeps magnitude is invisible when you jump straight ahead. Small enough that " +
+             "one air jump per airtime cannot become an engine.")]
+    public float airJumpGain = 2f;
 
     [Header("Crouch / slide")]
     public float standHeight = 2f;
@@ -151,8 +181,19 @@ public class PlayerMotor : MonoBehaviour
     float dashCooldownLeft;     // ditto — dt, never Time.time
     float dashGraceLeft;        // friction-immunity window after a dash
     int airJumpsUsed;           // reconciled — see MotorState
+    float airTime;              // seconds continuously airborne — reconciled, see MotorState
+    int wallJumpsUsed;          // reconciled — see MotorState
+    Vector3 lastWallNormal;     // ditto: which wall the last kick came off
     bool hasDash;               // resolved once in Awake
     bool hasDoubleJump;
+
+    // How long you must be continuously airborne before the AIR-ONLY verbs (space-dash,
+    // double jump) unlock. Exists because GroundCheck calls a climb "airborne": walking up a
+    // ramp puts velocity.y over its rising threshold, so single ticks read as air mid-walk —
+    // and a buffered jump press on such a tick became a phantom dash (playtest: "walking
+    // along the ramp triggers dash"). Six ticks of real airtime is imperceptible on a
+    // deliberate air move and impossible for ramp flicker, which regrounds every tick.
+    const float AirVerbDelay = 0.06f;
 
     void Awake()
     {
@@ -200,6 +241,9 @@ public class PlayerMotor : MonoBehaviour
             dashCooldownLeft = dashCooldownLeft,
             dashGraceLeft = dashGraceLeft,
             airJumpsUsed = airJumpsUsed,
+            airTime = airTime,
+            wallJumpsUsed = wallJumpsUsed,
+            lastWallNormal = lastWallNormal,
         };
         if (grapple != null)
             grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld);
@@ -220,6 +264,9 @@ public class PlayerMotor : MonoBehaviour
         dashCooldownLeft = s.dashCooldownLeft;
         dashGraceLeft = s.dashGraceLeft;
         airJumpsUsed = s.airJumpsUsed;
+        airTime = s.airTime;
+        wallJumpsUsed = s.wallJumpsUsed;
+        lastWallNormal = s.lastWallNormal;
         if (grapple != null)
             grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld);
         UpdateCapsule(); // collider must match the restored height before the next cast
@@ -252,6 +299,8 @@ public class PlayerMotor : MonoBehaviour
         if (grounded)
         {
             airJumpsUsed = 0; // refunded by touching ground
+            wallJumpsUsed = 0;
+            airTime = 0f;     // ramp flicker regrounds every tick, so this never accumulates
             if (sliding)
             {
                 // Keep momentum: low friction, speed-preserving steer, downhill accel.
@@ -267,12 +316,24 @@ public class PlayerMotor : MonoBehaviour
                 // Accelerate can't slow you either (add <= 0 above cap), so the burst carries.
                 if (dashGraceLeft <= 0f) ApplyFriction(dt);
                 Accelerate(wish, cap, groundAccel, dt);
-                if (!TryJump(cmd) && !Grappling) velocity.y = -2f; // glued down, unless grapple lifts us
+                if (!TryJump(cmd) && !Grappling)
+                {
+                    // Glue PERPENDICULAR to the surface, not straight down. A straight-down
+                    // press on a ramp gets projected along the slope by CollideAndSlide,
+                    // which re-injected a downhill drift every tick — a player standing
+                    // still on a ramp slowly slid off it (playtest). Pressing along
+                    // -groundNormal projects to exactly zero lateral motion, so standing
+                    // is standing; on flat ground the two are identical.
+                    Vector3 h = new Vector3(velocity.x, 0f, velocity.z);
+                    velocity = h - groundNormal * 2f;
+                }
             }
         }
         else
         {
-            TryAirJump(cmd);
+            airTime += dt; // before the air verbs, so a deliberate jump unlocks them on time
+            TryAirJump(cmd, wish);
+            TryWallJump(cmd, wish);
             float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
             Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * dt;
@@ -357,20 +418,22 @@ public class PlayerMotor : MonoBehaviour
     // Dash passive: burst in your INPUT direction (facing-relative), ground or air, on a
     // flat cooldown.
     //
-    // A speed FLOOR, not an additive impulse. Mathf.Max(Speed, dashSpeed) means a walking
-    // player gains a lot and an already-fast one gains almost nothing, so dashing can never
-    // compound with movement skill into runaway speed — above dashSpeed it becomes a free
-    // instant REDIRECT instead, which is a different tool rather than a bigger one. Same
-    // shape as PadBoost's Mathf.Max on Y.
+    // A speed FLOOR plus a small guaranteed surge. Mathf.Max(Speed + dashGain, dashSpeed):
+    // a walking player still gains a lot, and a fast one now gains exactly dashGain — enough
+    // to FEEL, too little to compound (everything between dashes bleeds more than it grants;
+    // see the dashGain tooltip). Above the floor it stays primarily an instant REDIRECT.
     void TryDash(InputCmd cmd, Vector3 wish, float dt, bool groundedAtTickStart)
     {
         dashCooldownLeft = Mathf.Max(0f, dashCooldownLeft - dt);
         if (!hasDash || dashCooldownLeft > 0f) return;
 
-        // Shift dashes anywhere. Space ALSO dashes, but only in the air — on the ground it
-        // has to stay jump. Dash and DoubleJump are mutually exclusive picks, so Space never
-        // has to choose between them: it means "use my mobility perk" either way.
-        bool wants = cmd.dashPressed || (!groundedAtTickStart && cmd.jumpPressed);
+        // Shift dashes anywhere. Space ALSO dashes, but only after REAL airtime — on the
+        // ground it has to stay jump, and "the ground" must include ramp ticks that
+        // GroundCheck mislabels as air (see AirVerbDelay), or walking up a ramp turns a
+        // buffered jump into a phantom dash. Dash and DoubleJump are mutually exclusive
+        // picks, so Space never has to choose between them: it means "use my mobility perk".
+        bool wants = cmd.dashPressed
+                     || (!groundedAtTickStart && cmd.jumpPressed && airTime >= AirVerbDelay);
         if (!wants) return;
 
         // No movement input = dash where you look, so the button never silently does nothing.
@@ -379,7 +442,7 @@ public class PlayerMotor : MonoBehaviour
         if (dir.sqrMagnitude < 1e-4f) return;
         dir.Normalize();
 
-        float speed = Mathf.Max(Speed, dashSpeed);
+        float speed = Mathf.Max(Speed + dashGain, dashSpeed);
         velocity.x = dir.x * speed;
         velocity.z = dir.z * speed;   // vertical untouched — a dash never fights gravity
         dashCooldownLeft = dashCooldown;
@@ -537,12 +600,117 @@ public class PlayerMotor : MonoBehaviour
     //
     // Sets velocity.y flat rather than adding, so it reliably rescues a fall — adding to a
     // large negative velocity would feel like the jump did nothing.
-    void TryAirJump(InputCmd cmd)
+    //
+    // Also REDIRECTS: horizontal momentum swings to your input direction, magnitude kept.
+    // Added after playtest ("make double jump better") — pure height was the passive's whole
+    // payoff while Dash offered a redirect AND a speed floor. Turning the second jump into a
+    // mid-air direction change makes it an outplay tool (juke a shotgun rush, cut around a
+    // corner) without granting a single m/s of free speed — same no-snowball rule as the dash.
+    // Deterministic (reads only cmd + state), so prediction/reconcile are unaffected.
+    void TryAirJump(InputCmd cmd, Vector3 wish)
     {
         if (!hasDoubleJump || !cmd.jumpPressed) return;
         if (airJumpsUsed >= airJumpCount) return;
+        // Same ramp-flicker guard as the space-dash — a jump press while "airborne" for one
+        // mislabelled climb tick must not spend the air jump (see AirVerbDelay).
+        if (airTime < AirVerbDelay) return;
         velocity.y = airJumpForce;
+
+        // Redirect + surge: momentum swings to the input direction AND gains airJumpGain —
+        // without the gain, a straight-ahead air jump kept the exact same horizontal velocity
+        // and read as nothing (the same invisibility the dash's pure floor had). No input
+        // still surges along the current travel direction, so the button always does a thing.
+        Vector3 horiz = new Vector3(velocity.x, 0f, velocity.z);
+        float mag = horiz.magnitude;
+        Vector3 dir = wish.sqrMagnitude > 0.01f ? wish.normalized
+                    : mag > 0.5f ? horiz / mag : Vector3.zero;
+        if (dir != Vector3.zero)
+        {
+            float speed = mag + airJumpGain;
+            velocity.x = dir.x * speed;
+            velocity.z = dir.z * speed;
+        }
+
         airJumpsUsed++;
+    }
+
+    // Wall jump. BASELINE, not a passive — the same reasoning the grapple is free (see
+    // PassiveType): a traversal verb that shapes how you read every wall in the arena should
+    // not cost the one loadout slot, or half the lobby is playing a different movement game.
+    // As a pick it also competed with DoubleJump for the same "air recovery" job; as a
+    // baseline it composes with it instead.
+    //
+    // Kick off a wall in mid-air, in the direction you are pushing.
+    //
+    // The one rule that keeps it from being a ladder: consecutive kicks must come off
+    // MEANINGFULLY DIFFERENT surfaces. Without it a player pins themselves to one wall and
+    // climbs it forever, which turns every boundary in the map into a staircase and makes the
+    // arena's verticality meaningless. Alternating surfaces makes it a corner move — in and
+    // out of a gap, around a pillar — which is a route, not an elevator.
+    //
+    // Deterministic (reads only cmd + state + world geometry), so prediction and reconcile
+    // handle it like everything else in Step.
+    void TryWallJump(InputCmd cmd, Vector3 wish)
+    {
+        if (!cmd.jumpPressed) return;
+        if (airTime < AirVerbDelay) return;            // same ramp-flicker guard as the air jump
+        if (wallJumpsUsed >= wallJumpCount) return;
+
+        // Probe where you are PUSHING first, then the sides and behind — brushing past a wall
+        // while strafing should still offer the kick, or the move only works when you aim at
+        // a surface you are trying to leave.
+        Vector3 face = wish.sqrMagnitude > 1e-4f
+            ? wish.normalized
+            : Quaternion.Euler(0f, cmd.yaw, 0f) * Vector3.forward;
+        Vector3 origin = transform.position + Vector3.up * (height * 0.5f);
+
+        if (!FindWall(origin, face, out Vector3 n)
+            && !FindWall(origin, Quaternion.Euler(0f, 90f, 0f) * face, out n)
+            && !FindWall(origin, Quaternion.Euler(0f, -90f, 0f) * face, out n)
+            && !FindWall(origin, -face, out n))
+            return;
+
+        if (wallJumpsUsed > 0 && Vector3.Dot(n, lastWallNormal) > 0.7f) return; // same wall
+
+        velocity.y = wallJumpUp;
+
+        // Away from the wall, biased toward your input so you steer the exit rather than
+        // being fired straight back the way you came. Speed is a FLOOR, like the dash: it
+        // rescues a slow approach without rewarding one.
+        Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
+        float speed = Mathf.Max(flat.magnitude, wallJumpPush);
+        Vector3 outDir = n + face * 0.35f;
+        outDir.y = 0f;
+        if (outDir.sqrMagnitude < 1e-4f) { outDir = n; outDir.y = 0f; }
+        if (outDir.sqrMagnitude < 1e-4f) return;
+        outDir.Normalize();
+
+        velocity.x = outDir.x * speed;
+        velocity.z = outDir.z * speed;
+
+        lastWallNormal = n;
+        wallJumpsUsed++;
+    }
+
+    // A wall is anything steeper than the slope limit — i.e. exactly the surfaces GroundCheck
+    // refuses to stand on, so the two can never disagree about what counts as a wall.
+    bool FindWall(Vector3 origin, Vector3 dir, out Vector3 normal)
+    {
+        normal = Vector3.zero;
+        if (dir.sqrMagnitude < 1e-4f) return false;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 1e-4f) return false;
+        dir.Normalize();
+
+        if (Physics.SphereCast(origin, Radius * 0.6f, dir, out RaycastHit hit, wallJumpReach,
+                groundMask, QueryTriggerInteraction.Ignore)
+            && hit.collider != col
+            && Vector3.Angle(hit.normal, Vector3.up) > slopeLimit)
+        {
+            normal = hit.normal;
+            return true;
+        }
+        return false;
     }
 
     void GroundCheck()

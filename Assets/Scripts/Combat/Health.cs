@@ -23,14 +23,12 @@ public class Health : NetworkBehaviour, IDamageable
 
     bool HasAuthority => !IsSpawned || IsServerStarted;
 
-    Renderer rend;
     Collider col;
     float reviveAt;
     bool suppressed; // held down by something else (SimpleBot when its slot is unused)
 
     void Awake()
     {
-        rend = GetComponent<Renderer>();
         col = GetComponent<Collider>();
         hp.Value = maxHp;
         hp.OnChange += OnHpChanged;
@@ -44,7 +42,10 @@ public class Health : NetworkBehaviour, IDamageable
 
     void ApplyVisible(bool on)
     {
-        if (rend != null) rend.enabled = on;
+        // Children too, not just our own renderer: the head cap (HeadCapVisual) is a child,
+        // and a dead bot leaving its dark cap floating in the air would be a ghost target.
+        // Fetched live rather than cached in Awake because the cap is attached after Awake.
+        foreach (var r in GetComponentsInChildren<Renderer>(true)) r.enabled = on;
         if (col != null) col.enabled = on;
     }
 

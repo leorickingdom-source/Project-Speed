@@ -29,6 +29,7 @@ public class KillFeed : NetworkBehaviour
     {
         public string killer;      // null for an environment death
         public string victim;
+        public KillKind kind;      // how the killing hit landed
         public Color killerTint;
         public Color victimTint;
         public float until;
@@ -48,8 +49,10 @@ public class KillFeed : NetworkBehaviour
 
     // Called on the SERVER (or by whoever has authority offline). killer may be null: falling
     // into the pit is a death with no killer, and pretending otherwise would credit whoever
-    // happened to shoot last.
-    public static void Announce(NetworkObject killer, NetworkObject victim)
+    // happened to shoot last. `kind` says HOW — a headshot or a melee execution is an
+    // achievement, and the feed is the one place everyone in the match sees it.
+    public static void Announce(NetworkObject killer, NetworkObject victim,
+        KillKind kind = KillKind.Normal)
     {
         if (victim == null) return;
         if (instance == null) instance = FindAnyObjectByType<KillFeed>();
@@ -59,20 +62,21 @@ public class KillFeed : NetworkBehaviour
         // what makes the feed work in single-player practice against bots.
         if (!instance.IsSpawned || !instance.IsServerStarted)
         {
-            instance.AddLocal(killer, victim);
+            instance.AddLocal(killer, victim, kind);
             return;
         }
 
-        instance.BroadcastKill(killer, victim);
+        instance.BroadcastKill(killer, victim, kind);
     }
 
     // NetworkObject references rather than strings: the name is already on the victim's and
     // killer's PlayerIdentity, so sending it again would be the same fact twice on the wire and
     // would go stale the moment somebody renames mid-match.
     [ObserversRpc]
-    void BroadcastKill(NetworkObject killer, NetworkObject victim) => AddLocal(killer, victim);
+    void BroadcastKill(NetworkObject killer, NetworkObject victim, KillKind kind) =>
+        AddLocal(killer, victim, kind);
 
-    void AddLocal(NetworkObject killer, NetworkObject victim)
+    void AddLocal(NetworkObject killer, NetworkObject victim, KillKind kind)
     {
         if (victim == null) return;
 
@@ -80,6 +84,7 @@ public class KillFeed : NetworkBehaviour
         {
             killer = killer != null ? NameOf(killer) : null,
             victim = NameOf(victim),
+            kind = killer != null ? kind : KillKind.Normal,
             killerTint = killer != null ? TintOf(killer) : Color.grey,
             victimTint = TintOf(victim),
             until = Time.time + entryLifetime,
@@ -125,13 +130,23 @@ public class KillFeed : NetworkBehaviour
 
             // Drawn right-to-left in pieces so the killer and victim keep their own colours —
             // one flat string would lose the thing that makes a feed scannable at a glance.
+            // Each kill kind gets its own verb: a symbol would need a legend, the word does not.
             string victim = e.victim;
-            string verb = e.killer != null ? " killed " : " died";
+            string verb = e.killer == null ? " died"
+                        : e.kind == KillKind.Headshot ? " headshot "
+                        : e.kind == KillKind.Melee ? " meleed "
+                        : " killed ";
             string killer = e.killer ?? "";
 
             var vs = new GUIStyle(style); vs.normal.textColor = Fade(e.victimTint, alpha);
             var ks = new GUIStyle(style); ks.normal.textColor = Fade(e.killerTint, alpha);
-            var ns = new GUIStyle(style); ns.normal.textColor = Fade(new Color(1f, 1f, 1f, 0.75f), alpha);
+            var ns = new GUIStyle(style);
+            // Coloured verb on the special kills, so the row pops even when you only catch it
+            // peripherally: gold for a headshot, red for a melee execution.
+            Color verbTint = e.kind == KillKind.Headshot ? new Color(1f, 0.85f, 0.35f)
+                           : e.kind == KillKind.Melee ? new Color(1f, 0.45f, 0.4f)
+                           : new Color(1f, 1f, 1f, 0.75f);
+            ns.normal.textColor = Fade(verbTint, alpha);
 
             float right = Screen.width - rightMargin;
             float vw = vs.CalcSize(new GUIContent(victim)).x;

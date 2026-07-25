@@ -34,7 +34,9 @@ public class InputReader : MonoBehaviour
         // While the rebinder is capturing, every press is a candidate binding. Letting it also
         // reach the sim means the click that binds fire also fires, and the key that binds
         // forward also buffers a jump for whenever the panel closes.
-        if (KeybindsUI.Open)
+        // The connect screen and the rebinder both take the keyboard away from the game: a
+        // press there is a menu interaction, not a movement command.
+        if (KeybindsUI.Open || ConnectUI.MenuOpen)
         {
             Move = Vector2.zero;
             JumpHeld = CrouchHeld = FireHeld = GrappleHeld = false;

@@ -11,7 +11,7 @@ using UnityEngine.InputSystem;
 // FireArrow(), Projectile.cs, Rocket.cs — stay wired, so any of them returns by uncommenting.
 // Hitscan = instant ray. Arrow = dodgeable travelling shot (Projectile, direct damage).
 // Projectile = travelling shot that explodes (Rocket, splash + self-knockback).
-public enum FireKind { Hitscan, Projectile, Arrow }
+public enum FireKind { Hitscan, Projectile, Arrow, Melee }
 
 [System.Serializable]
 public class Weapon
@@ -72,6 +72,11 @@ public class Weapon
              "repeatable; at 1 a single jump costs ~70% of your health.")]
     [Range(0f, 1f)] public float selfDamageScale = 0.5f;
 
+    [Tooltip("Field of view while scoped. 0 = this weapon has no scope. Magnification is the " +
+             "whole feature: the sniper is the only gun whose targets are routinely too small " +
+             "to resolve at the range it is built for.")]
+    public float scopeFov = 0f;
+
     [Header("Ammo")]
     public int magSize = 15;
     public float reloadTime = 1.2f;
@@ -100,24 +105,93 @@ public class WeaponController : MonoBehaviour
     [Tooltip("Top fraction of a target's height that counts as a headshot.")]
     [Range(0f, 1f)] public float headFraction = 0.28f;
 
+    [Header("Melee")]
+    [Tooltip("Forgiveness radius on the swing sweep — a melee that has to be aimed like a " +
+             "sniper is one nobody reaches for in the panic it exists for. Reach and cooldown " +
+             "live on the Knife weapon itself (range / cycle), since it is a weapon now.")]
+    public float meleeRadius = 0.5f;
+
     [Header("Tracers")]
     public float tracerTime = 0.04f;
 
     public int Current { get; private set; }
+
+    // The weapon you committed to on the connect screen. Current can leave this temporarily
+    // (rocket pickup) but always comes back to it.
+    int lockedIndex;
 
     // Applied once by PlayerNetwork when the owning player spawns, then never changed —
     // the loadout is locked for the match by design.
     public void SetLockedWeapon(int index)
     {
         if (weapons == null || weapons.Length == 0) return;
-        Current = Mathf.Clamp(index, 0, weapons.Length - 1);
+        Current = lockedIndex = Mathf.Clamp(index, 0, weapons.Length - 1);
         reloadDoneAt = 0f;
+        // Start() may not have run yet when this arrives; Start re-applies visibility too.
+        if (knifeView != null) knifeView.SetVisible(Current == KnifeIndex);
+    }
+
+    // Rocket pickup collected: swap to the rocket with `rockets` in the tube. The locked
+    // weapon comes back when they run out (see the fire path) or on respawn. Called from
+    // PlayerNetwork's TargetRpc, so only the collecting player's own client runs it.
+    public void GiveRocket(int rockets)
+    {
+        if (weapons == null || RocketIndex >= weapons.Length) return;
+        weapons[RocketIndex].ammo = Mathf.Max(1, rockets);
+        Current = RocketIndex;
+        reloadDoneAt = 0f; // a reload mid-swap would otherwise finish on the wrong weapon
+        // Even a knife player holds the launcher while it has rockets — it is the one thing
+        // that gives that loadout a ranged answer, briefly.
+        if (knifeView != null) knifeView.SetVisible(false);
     }
     public Weapon CurrentWeapon => (weapons != null && Current >= 0 && Current < weapons.Length) ? weapons[Current] : null;
     public string CurrentName => CurrentWeapon != null ? CurrentWeapon.name : "-";
     public int CurrentAmmo => CurrentWeapon != null ? CurrentWeapon.ammo : 0;
     public int CurrentMag => CurrentWeapon != null ? CurrentWeapon.magSize : 0;
+    // Ammoless weapons print a dash instead of "0 / 0", which otherwise reads as empty —
+    // the exact opposite of "this one never runs out".
+    public bool CurrentIsAmmoless => CurrentWeapon != null && CurrentWeapon.magSize <= 0;
     public bool Reloading => Time.time < reloadDoneAt;
+
+    // True while the scope is held on a weapon that has one. Read by SpeedFeel (camera FOV),
+    // MouseLook (sensitivity) and the HUD (overlay) — the state lives here because the WEAPON
+    // decides whether scoping is even possible.
+    public bool Scoped { get; private set; }
+
+    // Mouse sensitivity multiplier so a scoped flick moves the same distance ON SCREEN as an
+    // unscoped one. Without it, magnification multiplies your aim error by the same factor it
+    // multiplies the target, which is worse than no scope at all.
+    public float ScopeSensitivityScale
+    {
+        get
+        {
+            var w = CurrentWeapon;
+            if (!Scoped || w == null || w.scopeFov <= 0f) return 1f;
+            float baseFov = Mathf.Max(1f, GameSettings.Fov);
+            return Mathf.Clamp(w.scopeFov / baseFov, 0.15f, 1f);
+        }
+    }
+    // 0..1 through the current reload, for the HUD's progress ring. 0 when not reloading.
+    public float ReloadProgress01
+    {
+        get
+        {
+            if (!Reloading) return 0f;
+            float total = reloadDoneAt - reloadStartedAt;
+            return total > 0f ? Mathf.Clamp01((Time.time - reloadStartedAt) / total) : 0f;
+        }
+    }
+    // True while this player is carrying an OBJECTIVE — the oddball or the flag. Both are
+    // two-handed: your gun is gone, and the objective itself becomes the weapon.
+    public bool BallCarrier
+    {
+        get
+        {
+            if (match == null) match = FindAnyObjectByType<MatchManager>();
+            if (match == null || net == null) return false;
+            return match.IsCarrier(net.OwnerId) || match.IsFlagCarrier(net.OwnerId);
+        }
+    }
 
     MomentumDamage momentum;
     HighgroundDamage highground;
@@ -126,6 +200,7 @@ public class WeaponController : MonoBehaviour
     HitFeedback feedback;                    // owner-only shot confirmation
     PlayerAudio audioFx;
     TracerRenderer tracers;                  // stays active on remote players too
+    PlayerHealth health;                     // gates firing: the dead do not shoot
     readonly RaycastHit[] rayHits = new RaycastHit[16];
 
     // Combined damage-passive multiplier. Each source returns 1 when not equipped, and
@@ -137,6 +212,10 @@ public class WeaponController : MonoBehaviour
 
     float nextFire;
     float reloadDoneAt;
+    float reloadStartedAt;
+    KnifeView knifeView;        // owner-only viewmodel, built at runtime
+    int preBallIndex;           // weapon to restore when the ball leaves your hands
+    MatchManager match; // oddball carrier check; found lazily, null offline
 
     void Awake()
     {
@@ -152,9 +231,30 @@ public class WeaponController : MonoBehaviour
         feedback = GetComponent<HitFeedback>();
         audioFx = GetComponent<PlayerAudio>();
         tracers = GetComponent<TracerRenderer>();
+        health = GetComponent<PlayerHealth>();
+        // Corpses live on Ignore Raycast (layer 2) so a body tumbling next to a fight can
+        // never eat a shot. Stripped here rather than trusted from the inspector, because
+        // hitMask defaults to ~0 and nobody remembers layer flags during a playtest.
+        hitMask &= ~(1 << 2);
         if (weapons == null || weapons.Length == 0) weapons = DefaultLoadout();
         foreach (var w in weapons) w.ammo = w.magSize; // start loaded
-        Current = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
+        // ...except the rocket, which is a MAP PICKUP. Loading it here handed every player
+        // four rockets at spawn. They were unreachable (nothing switches to it without a
+        // pickup) so nothing visibly broke — but the first pickup of the match would then
+        // grant rockets on top of a tube that was never supposed to have any.
+        if (RocketIndex < weapons.Length) weapons[RocketIndex].ammo = 0;
+        Current = lockedIndex = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
+    }
+
+    // The viewmodel is built here rather than placed on the prefab so it can never be half
+    // configured in the inspector, and so it finds the camera after PlayerNetwork has decided
+    // which camera survives. Start() runs after that.
+    void Start()
+    {
+        if (aim == null) return;
+        knifeView = gameObject.AddComponent<KnifeView>();
+        knifeView.Build(aim);
+        knifeView.SetVisible(Current == KnifeIndex);
     }
 
     static Weapon[] DefaultLoadout() => new[]
@@ -179,25 +279,32 @@ public class WeaponController : MonoBehaviour
         // Full damage to 25m keeps it the most dependable gun at the ranges fights actually
         // happen at, and the taper past that hands the long lane back to the Sniper.
         //
-        // Automatic (hold to fire) rather than semi. At a 0.55s cycle this is comfort, not
-        // power: a human clicks far faster than 1.8 times a second, so the cycle was already
+        // Automatic (hold to fire) rather than semi. At this cycle it is comfort, not
+        // power: a human clicks far faster than the gun fires, so the cycle was already
         // doing the gating and the click was only ever making the player's hand do the work.
-        new Weapon { name = "Revolver", kind = FireKind.Hitscan, automatic = true, cycle = 0.55f,
+        //
+        // Playtest: still reading as too good. Light touch, identity intact: cycle 0.55 -> 0.6
+        // (3-shot kill 1.10s -> 1.20s, level with the sniper's 2-shot instead of beating it)
+        // and full-damage range 25m -> 20m so the taper starts inside mid-range fights rather
+        // than after them. Still 65 damage, still a 3-shot body kill.
+        new Weapon { name = "Revolver", kind = FireKind.Hitscan, automatic = true, cycle = 0.6f,
                      damage = 65f, pellets = 1, spreadDegrees = 0f,  range = 200f, tracer = new Color(1.00f, 0.72f, 0.40f),
-                     nearDistance = 25f, nearMultiplier = 1f, farDistance = 60f, farMultiplier = 0.55f,
+                     nearDistance = 20f, nearMultiplier = 1f, farDistance = 60f, farMultiplier = 0.55f,
+                     // Light zoom, not a scope. The Revolver is the other weapon whose whole
+                     // identity is that each shot must land, so it gets help SEEING the target
+                     // — but at 65 (vs base 90) it magnifies about 1.4x against the sniper's
+                     // 2.8x, which reads as leaning in rather than setting up.
+                     scopeFov = 65f,
                      magSize = 6, reloadTime = 1.4f },
         // Rifle: honest all-rounder, mild taper so it never dominates the sniper lane.
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
                      damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
                      nearDistance = 45f, nearMultiplier = 1f, farDistance = 90f, farMultiplier = 0.7f,
+                     // Same light zoom as the Revolver: the Rifle is the all-rounder, so it
+                     // should be able to take a considered shot at 60m without being handed
+                     // the sniper's magnification.
+                     scopeFov = 70f,
                      magSize = 30, reloadTime = 1.6f },
-        // Rocket SHELVED (not deleted) — rocket-jumping is a Quake signature and this game
-        // is deliberately diverging from it. Everything it needs still works: FireKind
-        // .Projectile, FireProjectile(), Rocket.cs and Explosion.cs are all intact, so
-        // restoring it is re-adding this entry (plus a digit key below) and nothing else.
-        // new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true,  cycle = 0.9f,
-        //              projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
-        //              magSize = 4, reloadTime = 2.2f },
         // Sniper: INVERTED falloff — 40% under 10m, full past 25m. Being rushed is now the
         // sniper's actual weakness rather than a thing players had to agree to pretend.
         //
@@ -217,8 +324,14 @@ public class WeaponController : MonoBehaviour
         new Weapon { name = "Sniper", kind = FireKind.Hitscan, automatic = true,  cycle = 1.2f,
                      damage = 100f, pellets = 1, spreadDegrees = 0f, range = 400f, tracer = new Color(0.40f, 0.90f, 1.00f),
                      headMultiplierOverride = 3f,
+                     // Scoped view. Costs peripheral vision — in a game where people close
+                     // 20m in a second, tunnel vision IS the price of the magnification.
+                     scopeFov = 32f,
                      nearDistance = 10f, nearMultiplier = 0.4f, farDistance = 25f, farMultiplier = 1f,
-                     magSize = 5, reloadTime = 1.8f },
+                     // 1.5s, down from 1.8 (playtest). The sniper already pays for its power
+                     // twice — a 1.2s cycle AND a 5-round magazine — so the reload was a third
+                     // tax on the same weakness. Still the joint-longest in the game.
+                     magSize = 5, reloadTime = 1.5f },
         // SMG: close-mid pressure, gutted at range so it cannot contest the lane.
         //
         // 45 rounds, not the 30 it shared with the Rifle. Identical magazines gave the SPRAY
@@ -228,9 +341,14 @@ public class WeaponController : MonoBehaviour
         // volume of fire cannot be the one that runs dry first.
         // 45 also puts its held-fire duration (45 * 0.07 = 3.15s) level with the Rifle's 3.19s,
         // so "how long can I hold the trigger" stops being the axis they differ on. What still
-        // separates them is range: spread alone drops the SMG to a 19% hit rate at 30m.
+        // separates them is range: spread alone drops the SMG to a low hit rate at 30m.
+        //
+        // Playtest: "not rewarding". 9 -> 10 damage (kill 17 -> 15 hits, DPS 129 -> 143) and
+        // spread 3.5 -> 3.0 so more of the stream actually connects inside its own bracket.
+        // The range identity is untouched — falloff still guts it past 20m — this is making
+        // its GOOD range feel good rather than letting it reach further.
         new Weapon { name = "SMG",    kind = FireKind.Hitscan, automatic = true,  cycle = 0.07f,
-                     damage = 9f,  pellets = 1, spreadDegrees = 3.5f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
+                     damage = 10f, pellets = 1, spreadDegrees = 3.0f, range = 150f, tracer = new Color(0.80f, 0.90f, 1.00f),
                      nearDistance = 20f, nearMultiplier = 1f, farDistance = 45f, farMultiplier = 0.4f,
                      magSize = 45, reloadTime = 1.4f },
         // Shotgun: brutal inside 8m, nearly harmless by 20m. Must close to matter.
@@ -245,8 +363,14 @@ public class WeaponController : MonoBehaviour
         // 13 restores 2 shells bare / 3 through full armour, and holds both of those against
         // Vitality (190) too. Bare performance is deliberately unchanged: this is an anti-armour
         // correction, not a buff to the gun.
-        new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.7f,
-                     damage = 13f, pellets = 8, spreadDegrees = 8f,  range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
+        //
+        // Playtest: "not rewarding". The problem was CONSISTENCY, not ceiling: at 8 degrees a
+        // point-blank shell could still miss half its pellets, so the weapon that gambles the
+        // most per trigger pull was also the most random about paying out. Spread 8 -> 6.5
+        // tightens the pattern inside its 8m kill bracket; cycle 0.7 -> 0.65 softens the cost
+        // of a pellet-lottery loss. Falloff unchanged — it still cannot contest 20m.
+        new Weapon { name = "Shotgun", kind = FireKind.Hitscan, automatic = true, cycle = 0.65f,
+                     damage = 13f, pellets = 8, spreadDegrees = 6.5f, range = 40f,  tracer = new Color(1.00f, 0.75f, 0.35f),
                      nearDistance = 8f, nearMultiplier = 1f, farDistance = 20f, farMultiplier = 0.2f,
                      magSize = 6, reloadTime = 1.8f },
         // Bow / Knives / Crossbow SHELVED (not deleted). All-projectile play was the problem:
@@ -266,12 +390,65 @@ public class WeaponController : MonoBehaviour
         //              damage = 38f, projectileSpeed = 90f, projectileGravity = 0f, projectileRadius = 0.13f,
         //              tracer = new Color(0.70f, 0.65f, 0.55f),
         //              magSize = 8, reloadTime = 1.5f },
+
+        // Rocket — BACK, but as a MAP PICKUP only (see RocketIndex / GiveRocket). It was
+        // shelved because rocket-jumping-as-baseline is a Quake signature this game diverges
+        // from; a 4-rocket pickup on a 30s timer is a different thing — a temporary power
+        // spike you fight over, not a movement economy. Appended at the END so the
+        // connect-screen indices 0-4 and every saved loadout keep meaning what they meant.
+        new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true, cycle = 0.9f,
+                     projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
+                     tracer = new Color(1.00f, 0.50f, 0.15f),
+                     magSize = 4, reloadTime = 999f }, // never reloads — empty means it's gone
+
+        // Knife — a PRIMARY loadout, picked on the connect screen like any gun and locked for
+        // the match. Not a sidearm everyone carries: that version let a rifle player keep the
+        // instant kill as a free panic button, which is the opposite of a commitment. Choosing
+        // it means choosing to own no ranged option at all on a map up to 150m across.
+        //
+        // The trade is the whole design: nothing whatsoever at range, an unanswerable win
+        // inside 3.5m. Cycle 0.75 (not the sidearm's 1.1) because a whiffed swing is already
+        // punished by the fact that the other player has a gun — punishing it twice with a
+        // long recovery made the pick unusable rather than risky.
+        //
+        // damage is the lethal constant: the swing either connects and kills, or it misses.
+        // magSize 0 marks it ammoless — the HUD reads that rather than printing "0 / 0".
+        // automatic: hold to keep swinging. The 0.75s cycle already paces it, so requiring a
+        // click per swing only made the player's hand do work the cooldown was doing anyway —
+        // the same reasoning that made the Revolver hold-to-fire.
+        new Weapon { name = "Knife", kind = FireKind.Melee, automatic = true, cycle = 0.75f,
+                     damage = MeleeDamage, range = 3.5f, tracer = new Color(0.85f, 0.92f, 1.00f),
+                     magSize = 0, reloadTime = 0f },
+
+        // The oddball itself, swung as a weapon. Not selectable: you are handed it the moment
+        // you pick the ball up and it is taken away when you lose it. Slower and shorter than
+        // the knife because it is a lump of objective, not a blade — carrying is still a
+        // downgrade for everyone except the player who committed to melee anyway.
+        new Weapon { name = "Ball", kind = FireKind.Melee, automatic = true, cycle = 1.0f,
+                     damage = MeleeDamage, range = 3.0f, tracer = new Color(0.75f, 0.55f, 1.00f),
+                     magSize = 0, reloadTime = 0f },
     };
+
+    // Fixed slots in the default loadout. The pickup path, the melee swap and the HUD all
+    // need these, and "the last entry" is too easy to silently break by appending a weapon.
+    public const int RocketIndex = 5;
+    public const int KnifeIndex = 6;
+    public const int BallIndex = 7;
 
     void Update()
     {
         if (Time.timeScale == 0f) return;   // no firing / switching while paused
         if (KeybindsUI.Open) return;        // nor while a click is being read as a binding
+        if (ConnectUI.MenuOpen) return;     // nor while the connect panel owns the screen
+        // Dead players fire nothing — the corpse camera is third person and the crosshair is
+        // gone, so a shot from a dead body was pure ghost damage from the victim's screen.
+        // Also freezes reload progress while dead; ResetForRespawn refills anyway.
+        if (health != null && !health.Alive) { Scoped = false; return; }
+        // Carrying the oddball REPLACES your weapon with the ball. Both hands are on it, so
+        // the gun is gone for as long as you hold the objective — but you are not helpless:
+        // you can swing the thing. That is the trade the mode is built on, and forcing the
+        // slot here means no fire path anywhere can bypass it.
+        ApplyBallGate();
         var kb = Keyboard.current;
         if (kb != null && weapons != null)
         {
@@ -297,6 +474,10 @@ public class WeaponController : MonoBehaviour
 
         Weapon w = CurrentWeapon;
 
+        // Scope state. Dropped during a reload: working the bolt with your eye in the glass
+        // is exactly the moment you most need to see someone arriving.
+        Scoped = w != null && w.scopeFov > 0f && !Reloading && Keybinds.Held(GameAction.Scope);
+
         // Finish an in-progress reload.
         if (w != null && reloadDoneAt > 0f && Time.time >= reloadDoneAt)
         {
@@ -311,11 +492,30 @@ public class WeaponController : MonoBehaviour
                 : Keybinds.Pressed(GameAction.Fire);
             if (wantFire && Time.time >= nextFire)
             {
-                if (w.ammo > 0)
+                // magSize 0 means ammoless (the knife) — it can always swing, and must never
+                // fall into the auto-reload branch below looking for rounds it does not use.
+                if (w.magSize <= 0)
+                {
+                    Fire(w);
+                    nextFire = Time.time + w.cycle;
+                }
+                else if (w.ammo > 0)
                 {
                     Fire(w);
                     w.ammo--;
                     nextFire = Time.time + w.cycle;
+                    // Last rocket out -> the pickup is spent, back to your own gun. No reload
+                    // path for rockets: more of them come from the map, not from R.
+                    if (Current == RocketIndex && w.ammo <= 0)
+                    {
+                        Current = lockedIndex;
+                        // ...and put the viewmodel back with it. A Knife player who spent a
+                        // rocket pickup would otherwise finish the life swinging an invisible
+                        // blade, since GiveRocket had hidden it.
+                        if (knifeView != null)
+                            knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife
+                                                                    : KnifeView.Mode.None);
+                    }
                 }
                 else StartReload(); // clicked empty -> auto-reload
             }
@@ -326,21 +526,144 @@ public class WeaponController : MonoBehaviour
 
     void StartReload()
     {
+        if (Current == RocketIndex) return; // rockets are refilled by the map, not by R
         var w = CurrentWeapon;
         if (w != null && !Reloading && w.ammo < w.magSize)
+        {
+            reloadStartedAt = Time.time;
             reloadDoneAt = Time.time + w.reloadTime;
+        }
     }
+
+    // Fresh life, fresh mags. Called by PlayerHealth on respawn. Fixes the death-mid-reload
+    // trap: dying while reloading left reloadDoneAt in the future and the mag at 0, and with
+    // firing blocked while dead the reload could never complete — the sniper (longest reload,
+    // smallest mag) respawned with 0 rounds and a stuck "reloading" that never finished.
+    public void ResetForRespawn()
+    {
+        if (weapons == null) return;
+        foreach (var w in weapons) w.ammo = w.magSize;
+        reloadDoneAt = 0f;
+        nextFire = 0f;
+        // Back to the loadout you committed to, whatever you happened to be holding when you
+        // died — a rocket from a pickup, or the objective itself.
+        Current = lockedIndex;
+        preBallIndex = lockedIndex;   // stale value here would hand back a spent launcher
+
+        // Unspent rockets die with you: the pickup is earned per life, like armour.
+        if (RocketIndex < weapons.Length) weapons[RocketIndex].ammo = 0;
+
+        // Viewmodel follows the LOADOUT, not a swap. This used to force it off, which left a
+        // Knife player respawning empty-handed — holding the knife, swinging it, killing with
+        // it, with nothing on screen — for the rest of that life.
+        if (knifeView != null)
+            knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife : KnifeView.Mode.None);
+    }
+
+    // Force the ball into your hands while you carry it, and give your own weapon back the
+    // moment you do not. Runs every frame rather than on a pickup event because the carrier
+    // is a synced value owned by the server — the client learns it by observation, and an
+    // event we forgot to send would leave someone holding a rifle they should not have.
+    void ApplyBallGate()
+    {
+        if (weapons == null || BallIndex >= weapons.Length) return;
+
+        bool carrying = BallCarrier;
+        if (carrying && Current != BallIndex)
+        {
+            preBallIndex = Current;
+            Current = BallIndex;
+            reloadDoneAt = 0f;              // whatever was reloading is now on the floor
+            if (knifeView != null) knifeView.SetMode(KnifeView.Mode.Ball);
+        }
+        else if (!carrying && Current == BallIndex)
+        {
+            Current = preBallIndex;
+            if (knifeView != null)
+                knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife : KnifeView.Mode.None);
+            // Handed back an empty gun — start the reload rather than leaving it idle.
+            var back = CurrentWeapon;
+            if (back != null && back.magSize > 0 && back.ammo <= 0) StartReload();
+        }
+    }
+
+    // Instant-kill swing. The reward for closing to touching distance in a game built around
+    // closing distance — grapple in, dash past a sniper's bad range, execute. Lethal rather
+    // than merely heavy so the outcome is never a coin-flip on the victim's remaining HP:
+    // if you got there, you won, and that clarity is what makes people go for it.
+    //
+    // Deliberately no cone or lunge: it lands where the crosshair is, which keeps the
+    // counterplay honest — back up, or shoot the person sprinting at you.
+    void Melee(Weapon w)
+    {
+        if (aim == null) return;
+
+        // Announced even on a whiff, and visible to everyone. The swing sound and the slash
+        // ARE the counterplay cue: hearing or seeing one behind you is what lets you turn
+        // around, and a silent invisible whiff would make the approach free.
+        if (audioFx != null) audioFx.PlayMelee();
+        if (net != null && net.IsSpawned) net.ReportFire(MeleeAudioIndex);
+        if (knifeView != null) knifeView.Swing();
+        SlashFx(w);
+
+        // Sweep rather than a thin ray, and take the first thing that is not us. Uses the
+        // same self-exclusion rule as hitscan, since our own capsule sits on the muzzle.
+        int n = Physics.SphereCastNonAlloc(aim.position, meleeRadius, aim.forward, rayHits,
+            w.range, hitMask, QueryTriggerInteraction.Ignore);
+        float bestDist = float.MaxValue;
+        RaycastHit best = default;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            if (rayHits[i].collider.transform.root == transform.root) continue;
+            if (rayHits[i].collider.GetComponentInParent<IDamageable>() == null) continue;
+            if (rayHits[i].distance >= bestDist) continue;
+            bestDist = rayHits[i].distance;
+            best = rayHits[i];
+            found = true;
+        }
+        if (!found) return;
+
+        var target = best.collider.GetComponentInParent<IDamageable>();
+        if (target != null) ApplyDamage(best.collider, target, w.damage, KillKind.Melee);
+    }
+
+    // The arc of the swing, drawn through the SAME pooled renderer and network message the
+    // bullet tracers use — so a knife swing is as visible to a bystander as a gunshot, on
+    // every machine, for no new plumbing. Diagonal because a horizontal line reads as a
+    // laser; a slash has to look like it was swung.
+    void SlashFx(Weapon w)
+    {
+        Vector3 mid = aim.position + aim.forward * (w.range * 0.55f);
+        Vector3 a = mid - aim.right * 0.85f + aim.up * 0.35f;
+        Vector3 b = mid + aim.right * 0.85f - aim.up * 0.35f;
+        Tracer(a, b, w.tracer);
+    }
+
+    // Past every armour and Vitality combination there is: armour soaks at most 100, so any
+    // value over 290 is lethal through a full plate on a Vitality build. 9999 is that with
+    // no arithmetic to re-check the day those numbers move.
+    public const float MeleeDamage = 9999f;
+    // Sentinel weapon index for the fire-audio RPC — PlayerAudio maps it to the swing.
+    // Reuses the existing message rather than adding a second one that says the same thing.
+    public const int MeleeAudioIndex = -1;
 
     void Fire(Weapon w)
     {
         if (aim == null) return;
 
-        // Local first, so your own shot is instant. Then tell everyone else.
-        if (audioFx != null) audioFx.PlayFire(Current);
-        if (net != null && net.IsSpawned) net.ReportFire(Current);
+        // Local first, so your own shot is instant. Then tell everyone else. The knife is
+        // skipped here and announces itself inside Melee() — routing it through the gunshot
+        // table would give a blade the revolver's report.
+        if (w.kind != FireKind.Melee)
+        {
+            if (audioFx != null) audioFx.PlayFire(Current);
+            if (net != null && net.IsSpawned) net.ReportFire(Current);
+        }
 
         if (w.kind == FireKind.Projectile) FireProjectile(w);
         else if (w.kind == FireKind.Arrow) FireArrow(w);
+        else if (w.kind == FireKind.Melee) Melee(w);
         else FireHitscan(w);
     }
 
@@ -369,7 +692,7 @@ public class WeaponController : MonoBehaviour
                     // Falloff is per-pellet: each shotgun pellet has its own travel distance.
                     float dmg = (head ? w.damage * w.HeadMultiplierOr(headMultiplier) : w.damage)
                                 * scale * w.DamageAtRange(hit.distance);
-                    ApplyDamage(hit.collider, hp, dmg);
+                    ApplyDamage(hit.collider, hp, dmg, head ? KillKind.Headshot : KillKind.Normal);
                 }
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
@@ -423,23 +746,45 @@ public class WeaponController : MonoBehaviour
 
     // Networked players must be damaged by the SERVER or the hit only exists on the shooter's
     // screen. Anything without a NetworkObject (dummies, offline play) is applied locally.
-    void ApplyDamage(Collider victim, IDamageable hp, float damage)
+    // `kind` rides along so the kill feed can say HOW the kill was earned.
+    void ApplyDamage(Collider victim, IDamageable hp, float damage, KillKind kind)
     {
         // Confirm to the shooter immediately, before any network round-trip. This is the one
         // cue that has to feel instant, and it matches the trust model anyway — the client
         // already decides its own hits (see PlayerNetwork.ReportHit).
-        if (feedback != null) feedback.ShowHit();
+        if (feedback != null) feedback.ShowHit(kind);
 
         var nob = victim.GetComponentInParent<FishNet.Object.NetworkObject>();
-        if (net != null && net.IsSpawned && nob != null) net.ReportHit(nob, damage);
+        if (net != null && net.IsSpawned && nob != null) net.ReportHit(nob, damage, kind);
         else hp.Damage(damage);
     }
 
     void FireProjectile(Weapon w)
     {
+        Vector3 origin = aim.position + aim.forward * 0.6f; // spawn just ahead of the camera
+
+        // Always spawn locally — the shooter's rocket must leave the barrel THIS frame.
+        // Offline and on the host this copy is also the authoritative one (Damage writes go
+        // through). On a pure client it is only a visual: every Damage/impulse it lands is
+        // authority-refused, so the server is told to fire the REAL one. Same split SimpleBot
+        // uses for its shots — visuals everywhere, truth on the server.
+        SpawnRocket(origin, aim.forward, Current, DamageScale);
+        if (net != null && net.IsSpawned && !net.IsServerStarted)
+            net.ReportRocket(origin, aim.forward, Current, DamageScale);
+    }
+
+    // Shared by the local fire path and PlayerNetwork's rocket RPCs, so every machine builds
+    // the same projectile from the same stats. Owner is always THIS player: the travel mask
+    // must exclude the shooter (rocket-jumping fires at your own feet) and self-damage has to
+    // know whose feet those are.
+    public void SpawnRocket(Vector3 origin, Vector3 dir, int weaponIndex, float damageScale)
+    {
+        if (weapons == null || weaponIndex < 0 || weaponIndex >= weapons.Length) return;
+        Weapon w = weapons[weaponIndex];
+
         var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         go.name = "Rocket";
-        go.transform.position = aim.position + aim.forward * 0.6f; // spawn just ahead of the camera
+        go.transform.position = origin;
         go.transform.localScale = Vector3.one * 0.35f;
         Destroy(go.GetComponent<Collider>()); // Rocket sweeps with SphereCast; no physical collider
         var rend = go.GetComponent<Renderer>();
@@ -453,8 +798,8 @@ public class WeaponController : MonoBehaviour
         rocket.blastForce = w.blastForce;
         rocket.selfForce = w.selfForce;
         rocket.selfDamageScale = w.selfDamageScale;
-        rocket.damageScale = DamageScale; // sampled at launch — your speed when you fired
-        rocket.Launch(aim.forward, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
+        rocket.damageScale = damageScale; // sampled at launch — the shooter's speed when firing
+        rocket.Launch(dir, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
     }
 
     // Delegates to the always-active renderer, and tells observers so they see the shot too.

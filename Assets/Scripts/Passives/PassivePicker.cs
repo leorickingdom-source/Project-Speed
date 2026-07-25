@@ -13,14 +13,15 @@ public class PassivePicker : MonoBehaviour
 {
     public PassiveLoadout loadout;
 
-    // Index = function key. F1 = None, F2..F7 = the six passives.
+    // Index = function key. F1 = None, then one per listed passive.
+    // Dash shelved alongside its connect-screen entry — see PassiveChoice.Options.
     static readonly PassiveType[] Order =
     {
         PassiveType.None,
         PassiveType.Vitality,
         PassiveType.Momentum,
         PassiveType.Featherweight,
-        PassiveType.Dash,
+        PassiveType.DoubleJump,
         PassiveType.Highground,
         PassiveType.Camper,
     };

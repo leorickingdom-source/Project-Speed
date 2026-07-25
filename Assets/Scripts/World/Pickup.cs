@@ -179,8 +179,13 @@ public class Pickup : NetworkBehaviour
         return clip;
     }
 
+    // What the renderers are currently showing, so Update can cheaply reconcile against what
+    // they SHOULD be showing. Starts true because the prefab's renderers start enabled.
+    bool shownNow = true;
+
     void ApplyVisual(bool on)
     {
+        shownNow = on;
         if (visuals == null) return;
         foreach (var r in visuals) if (r != null) r.enabled = on;
     }
@@ -205,6 +210,14 @@ public class Pickup : NetworkBehaviour
     void Update()
     {
         bool on = ModeOn;
+
+        // Reconcile the renderers every frame instead of only on the SyncVar edge. The edge
+        // alone had a late-joiner hole: OnStartClient can run before MatchManager's
+        // pickupsEnabled has synced, hide the visuals, and nothing ever turns them back on —
+        // `available` never changes, so OnAvailableChanged never fires, and the pickup is
+        // invisible for that client for the rest of the session ("3rd player can't see stuff").
+        bool shouldShow = on && available.Value;
+        if (shouldShow != shownNow) ApplyVisual(shouldShow);
 
         // Cosmetic idle motion, run everywhere so it looks alive on every client.
         if (on && available.Value)

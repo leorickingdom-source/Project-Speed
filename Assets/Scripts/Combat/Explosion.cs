@@ -33,6 +33,10 @@ public static class Explosion
         float selfForce, float damage, GameObject owner,
         LayerMask blockMask, float selfDamageScale = 0.5f, float damageScale = 1f)
     {
+        // Show the sphere that is about to be judged — the visual IS the hitbox, so what
+        // players learn from watching it is true.
+        BlastFx.Spawn(center, radius);
+
         Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
         foreach (var c in hits)
         {
@@ -52,7 +56,20 @@ public static class Explosion
 
             var hp = c.GetComponentInParent<IDamageable>();
             if (hp != null)
+            {
+                // Name the shooter before the damage lands, so a lethal blast is a credited
+                // kill in the feed rather than "X died". Not for self-hits: your own rocket
+                // killing you is a suicide, and crediting it would pay for the mistake.
+                // Only sticks where the write sticks — on the authority — same as the damage.
+                if (!self && owner != null)
+                {
+                    var victimHealth = hp as PlayerHealth;
+                    var ownerNob = owner.GetComponent<FishNet.Object.NetworkObject>();
+                    if (victimHealth != null && ownerNob != null)
+                        victimHealth.RecordServerAttacker(ownerNob, KillKind.Normal);
+                }
                 hp.Damage(damage * falloff * (self ? selfDamageScale : damageScale));
+            }
         }
     }
 

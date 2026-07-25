@@ -30,6 +30,18 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public float regenPerSec = 0f;
     public float regenDelay = 3f;          // idle time after damage before regen starts
 
+    // SPEED HEALING REMOVED (playtest: "unkillable now"). The idea was that movement should
+    // be the only sustain outside pickups; in practice this game's whole design pushes
+    // players ABOVE the threshold almost permanently — bhop, slide, grapple and pads all
+    // exist to keep you fast — so the condition was not a condition, it was passive regen
+    // with extra steps, and passive regen is the thing this game deliberately does not have.
+    //
+    // Kept as a note rather than a disabled field: the fix for "reward speed" is not a
+    // smaller number here (a slower always-on regen is still always-on), it is a reward that
+    // costs the opponent something, e.g. the existing Momentum passive.
+    //
+    // The HUD's SpeedHealing tint went with it.
+
     [Tooltip("Where to respawn. Defaults to the player's start pose.")]
     public Transform spawnPoint;
 
@@ -90,6 +102,24 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     // client's copy, and the client must not be trusted to report its own killer.
     FishNet.Object.NetworkObject serverAttacker;
     float serverAttackerAt = -999f;
+    // How that last recorded hit landed — so the feed can say HOW, not just who.
+    KillKind serverAttackerKind;
+
+    // The visual capsule, hidden while dead so the corpse spawned in its place is the only
+    // body on screen — a corpse falling out of a still-standing player reads as a clone.
+    // Renderers are gathered at death time, not cached at Awake: the head cap is added later
+    // (PlayerNetwork.OnStartClient), and a cached list would leave it floating over the corpse.
+    Transform bodyT;
+    Renderer[] hiddenRends;
+    bool[] hiddenPrev;
+
+    // Colliders switched off while dead. A corpse that still blocks bullets reads as an
+    // INVINCIBLE body: shots stop on it, no damage happens (Damage refuses when !Alive), and
+    // from the shooter's side an enemy is standing there eating everything. Reported straight
+    // from playtest. The visual corpse is layer 2 (Ignore Raycast) and already excluded from
+    // weapon masks; this is the real player capsule, which was not.
+    Collider[] deadCols;
+    bool[] deadColsPrev;
 
     // Name of whoever last hit us, for the death screen. Null when nobody did.
     public string LastAttackerName => HasFreshAttacker ? lastAttackerName : null;
@@ -114,14 +144,22 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         lastAttackerName = attackerName;
         lastAttackerTransform = attacker;
         lastAttackerAt = Time.time;
+
+        // The killing report can arrive AFTER the death itself: the health SyncVar and this
+        // RPC travel separately, and nothing guarantees their order. When that happens the
+        // death camera has already started facing nothing — hand it the killer late rather
+        // than leaving it staring at a wall for the whole respawn.
+        if (!Alive && deathCam != null && deathCam.enabled)
+            deathCam.Retarget(attacker, worldPos);
     }
 
     // Called on the SERVER from PlayerNetwork.ReportHit, before the damage lands, so that Die
     // can name a killer without every damage path having to remember to announce one.
-    public void RecordServerAttacker(FishNet.Object.NetworkObject attacker)
+    public void RecordServerAttacker(FishNet.Object.NetworkObject attacker, KillKind kind)
     {
         serverAttacker = attacker;
         serverAttackerAt = Time.time;
+        serverAttackerKind = kind;
     }
 
     bool HasFreshAttacker => Time.time - lastAttackerAt <= attackerMemory;
@@ -132,6 +170,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         passives = GetComponent<PassiveLoadout>(); // optional — null means no passives equipped
         armour = GetComponent<PlayerArmour>();
         deathCam = GetComponent<DeathCam>();
+        bodyT = transform.Find("Body");
         if (spawnPoint != null) { spawnPos = spawnPoint.position; spawnRot = spawnPoint.rotation; }
         else { spawnPos = transform.position; spawnRot = transform.rotation; }
         hp.Value = MaxHp;
@@ -182,8 +221,15 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
         // Out of bounds -> instant death (invuln doesn't save you from the void). Vertical:
         // fell through the pit or off an edge. Horizontal: launched past the perimeter walls.
+        //
+        // The map's own MapBounds wins over the fields below, which are shared by every map
+        // through the player prefab — Arena's 48 would kill a player mid-arena on a 150m one.
+        var bounds = MapBounds.Current;
+        float limitDist = bounds != null ? bounds.killDistance : killDist;
+        float limitY = bounds != null ? bounds.killY : killY;
+
         Vector3 p = transform.position;
-        if (p.y < killY || (killDist > 0f && (Mathf.Abs(p.x) > killDist || Mathf.Abs(p.z) > killDist)))
+        if (p.y < limitY || (limitDist > 0f && (Mathf.Abs(p.x) > limitDist || Mathf.Abs(p.z) > limitDist)))
         {
             hp.Value = 0f;
             Die();
@@ -209,9 +255,26 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // credited: falling into the pit a few seconds after a firefight is not that player's
         // kill, and the feed saying otherwise would be worse than saying nothing.
         var killer = (Time.time - serverAttackerAt <= attackerMemory) ? serverAttacker : null;
-        KillFeed.Announce(killer, NetworkObject);
+        KillFeed.Announce(killer, NetworkObject,
+            killer != null ? serverAttackerKind : KillKind.Normal);
+
+        // Credit and confirm from HERE rather than the hitscan RPC, so every damage source
+        // that records an attacker — hitscan, rocket splash — produces a counted kill and a
+        // kill cue. Self-kills are a death with no credit; rocketing yourself into the pit
+        // should cost, not pay.
+        if (killer != null && killer != NetworkObject)
+        {
+            var killerScore = killer.GetComponent<PlayerScore>();
+            if (killerScore != null) killerScore.AddKill();
+            var net = killer.GetComponent<PlayerNetwork>();
+            if (net != null) net.NotifyKillConfirmed();
+            var match = FindAnyObjectByType<MatchManager>();
+            if (match != null) match.CheckForWinner();
+        }
+
         serverAttacker = null;
         serverAttackerAt = -999f;
+        serverAttackerKind = KillKind.Normal;
 
         ApplyDeadState();
     }
@@ -277,6 +340,34 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             else deathCam.Begin(null, null);
         }
 
+        // Swap the standing capsule for a falling one. Runs on every client via the SyncVar
+        // callback, so everyone sees the same body drop. Renderer states are remembered
+        // rather than assumed: the owner's own body is already hidden by PlayerNetwork, and
+        // blindly re-enabling it on respawn would put a capsule over their camera.
+        if (bodyT != null)
+        {
+            hiddenRends = bodyT.GetComponentsInChildren<Renderer>(true);
+            hiddenPrev = new bool[hiddenRends.Length];
+            for (int i = 0; i < hiddenRends.Length; i++)
+            {
+                hiddenPrev[i] = hiddenRends[i].enabled;
+                hiddenRends[i].enabled = false;
+            }
+        }
+        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null);
+
+        // Stop being solid. Runs on every client through the SyncVar callback, so the body
+        // stops blocking shots on the shooter's machine too — which is the machine that
+        // decides hits. Restored in ApplyAliveState BEFORE the motor unfreezes, so the
+        // controller never steps a frame without its capsule.
+        deadCols = GetComponentsInChildren<Collider>(true);
+        deadColsPrev = new bool[deadCols.Length];
+        for (int i = 0; i < deadCols.Length; i++)
+        {
+            deadColsPrev[i] = deadCols[i].enabled;
+            deadCols[i].enabled = false;
+        }
+
         if (motor == null) return;
         motor.velocity = Vector3.zero;
         motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
@@ -289,6 +380,28 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         lastAttackerTransform = null;
 
         if (deathCam != null && deathCam.enabled) deathCam.End();
+
+        if (hiddenRends != null)
+        {
+            for (int i = 0; i < hiddenRends.Length; i++)
+                if (hiddenRends[i] != null) hiddenRends[i].enabled = hiddenPrev[i];
+            hiddenRends = null;
+            hiddenPrev = null;
+        }
+
+        // Solid again — before the motor unfreezes below, or it would step once with no capsule.
+        if (deadCols != null)
+        {
+            for (int i = 0; i < deadCols.Length; i++)
+                if (deadCols[i] != null) deadCols[i].enabled = deadColsPrev[i];
+            deadCols = null;
+            deadColsPrev = null;
+        }
+
+        // Fresh mags every life. Also clears a reload that was mid-flight at death — see
+        // WeaponController.ResetForRespawn for the sniper trap this closes.
+        var weapon = GetComponent<WeaponController>();
+        if (weapon != null) weapon.ResetForRespawn();
 
         if (motor == null) return;
         motor.velocity = Vector3.zero;

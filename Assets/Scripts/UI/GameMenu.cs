@@ -29,10 +29,13 @@ public class GameMenu : MonoBehaviour
             $"{B(GameAction.Jump)}  —  jump (hold to bunny-hop)",
             $"{B(GameAction.Crouch)}  —  crouch · slide · crouch-jump",
             $"Mouse  —  look     {B(GameAction.Fire)}  —  fire     {B(GameAction.Reload)}  —  reload",
-            $"{B(GameAction.Grapple)}  —  grapple (reels you in)",
-            $"{B(GameAction.Dash)}, or {P(GameAction.Jump)} in mid-air  —  dash (Dash passive)",
+            $"{B(GameAction.Scope)}  —  scope (sniper)     Knife loadout: one hit kills",
+            $"{B(GameAction.Grapple)}  —  grapple, hold to reel in",
+            $"{P(GameAction.Jump)} against a wall in mid-air  —  wall jump (alternate walls)",
+            $"{P(GameAction.Jump)} in mid-air  —  double jump + redirect (DoubleJump passive)",
             "Deathmatch  —  one weapon, most kills wins",
-            "Aim for the head  —  2x damage",
+            "Aim for the head (dark cap)  —  bonus damage",
+            $"{B(GameAction.Scoreboard)}  —  hold for scoreboard",
             $"{B(GameAction.ToggleControls)}  —  this card     {B(GameAction.Pause)}  —  pause",
         };
         return controls;
@@ -112,8 +115,9 @@ public class GameMenu : MonoBehaviour
         // Nothing until you are actually in a match. The connect screen owns the display
         // before that, and this HUD used to draw straight through it — the hint line sits at
         // Screen.height - 26, which lands on top of the loadout descriptions in a short window.
-        if (!FishNet.InstanceFinder.IsClientStarted && !FishNet.InstanceFinder.IsServerStarted)
-            return;
+        // Through NetPresence, never InstanceFinder: the latter log-spams per access without
+        // a NetworkManager, and OnGUI runs several times a frame.
+        if (!NetPresence.IsRunning) return;
 
         // Modal. IMGUI will happily route a click to the Quit button sitting underneath the
         // rebinder, so nothing else may draw while it is up.
@@ -165,7 +169,7 @@ public class GameMenu : MonoBehaviour
             float halfW = (w - pad * 2f - 8f) * 0.5f;
             if (GUI.Button(new Rect(x + pad, cy, halfW, footH),
                     $"Resume  ({Keybinds.Label(Keybinds.Get(GameAction.Pause, 0))})")) SetPaused(false);
-            if (GUI.Button(new Rect(x + pad + halfW + 8f, cy, halfW, footH), "Quit  (Q)")) Quit();
+            if (GUI.Button(new Rect(x + pad + halfW + 8f, cy, halfW, footH), "Quit to desktop  (Q)")) Quit();
         }
     }
 

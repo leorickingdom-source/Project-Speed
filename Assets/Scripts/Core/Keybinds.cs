@@ -16,8 +16,10 @@ public enum GameAction
     Crouch,
     Dash,
     Fire,
+    Scope,
     Grapple,
     Reload,
+    Scoreboard,
     Pause,
     ToggleControls,
     ToggleDebug,
@@ -88,6 +90,35 @@ public static class Keybinds
             for (int slot = 0; slot < SlotCount && slot < parts.Length; slot++)
                 binds[a, slot] = Parse(parts[slot]);
         }
+        // Migration: saves from before the Scoreboard action have ToggleControls persisted on
+        // Tab, and Load just restored that on top of Scoreboard's new Tab default — two actions
+        // on one key, both firing every press. Scoreboard wins the contest (it is why the key
+        // moved); the card goes to the new F1 default.
+        var tab = Bind.FromKey(Key.Tab);
+        for (int slot = 0; slot < SlotCount; slot++)
+            if (binds[(int)GameAction.ToggleControls, slot].Equals(tab)
+                && (binds[(int)GameAction.Scoreboard, 0].Equals(tab)
+                    || binds[(int)GameAction.Scoreboard, 1].Equals(tab)))
+                binds[(int)GameAction.ToggleControls, slot] = Bind.FromKey(Key.F1);
+
+        // Migration: profiles saved before the scope existed have Grapple on right mouse, and
+        // Load has just restored that on top of Scope's new right-mouse default — two actions
+        // on one button. Scope wins (moving it there is the entire point of the change) and
+        // the grapple takes the thumb button, with Shift alongside it as before.
+        var rmb = Bind.FromMouse(1);
+        bool grappleOnRmb = binds[(int)GameAction.Grapple, 0].Equals(rmb)
+                         || binds[(int)GameAction.Grapple, 1].Equals(rmb);
+        bool scopeOnRmb = binds[(int)GameAction.Scope, 0].Equals(rmb)
+                       || binds[(int)GameAction.Scope, 1].Equals(rmb);
+        if (grappleOnRmb && scopeOnRmb)
+        {
+            for (int slot = 0; slot < SlotCount; slot++)
+                if (binds[(int)GameAction.Grapple, slot].Equals(rmb))
+                    binds[(int)GameAction.Grapple, slot] = default;
+            binds[(int)GameAction.Grapple, 0] = Bind.FromMouse(3);
+            binds[(int)GameAction.Grapple, 1] = Bind.FromKey(Key.LeftShift);
+        }
+
         loaded = true;
         Version++;
     }
@@ -112,13 +143,30 @@ public static class Keybinds
         Set(GameAction.MoveRight, Key.D, Key.RightArrow);
         Set(GameAction.Jump, Key.Space, Key.None);
         Set(GameAction.Crouch, Key.LeftCtrl, Key.C);
-        Set(GameAction.Dash, Key.LeftShift, Key.RightShift);
+        // Dash is SHELVED as a passive (see PassiveChoice), so its old Shift default would
+        // now sit on top of the grapple's alternate and show as a duplicate in the rebinder.
+        // Left unbound: if the passive ever comes back, it gets a key then.
+        Set(GameAction.Dash, Key.None, Key.None);
         Set(GameAction.Reload, Key.R, Key.None);
+        // Scope has no keyboard default any more: it lives on RIGHT MOUSE, below. Aiming down
+        // sights is right-click in every shooter a player has touched, and fighting that
+        // instinct costs more than any other binding decision here.
+        Set(GameAction.Scope, Key.None, Key.None);
+        // Tab = scoreboard (hold), the FPS-universal bind. The controls card lived on Tab
+        // before the scoreboard existed and moved to F1 to make room — see Load's migration.
+        Set(GameAction.Scoreboard, Key.Tab, Key.None);
         Set(GameAction.Pause, Key.Escape, Key.None);
-        Set(GameAction.ToggleControls, Key.Tab, Key.None);
+        Set(GameAction.ToggleControls, Key.F1, Key.None);
         Set(GameAction.ToggleDebug, Key.F3, Key.None);
         binds[(int)GameAction.Fire, 0] = Bind.FromMouse(0);
-        binds[(int)GameAction.Grapple, 0] = Bind.FromMouse(1);
+        binds[(int)GameAction.Scope, 0] = Bind.FromMouse(1);   // right mouse — the instinct
+
+        // Grapple moves to the thumb button. It is HELD to reel, which is what side buttons
+        // are good at, and it keeps the index finger free for fire and scope. Shift is the
+        // alternate for anyone on a three-button mouse, and it is free now that Dash is
+        // shelved — see PassiveChoice.
+        binds[(int)GameAction.Grapple, 0] = Bind.FromMouse(3); // Mouse4
+        binds[(int)GameAction.Grapple, 1] = Bind.FromKey(Key.LeftShift);
         loaded = true; // a reset is a fully-formed set; a later Load must not clobber it
         Version++;
 
@@ -268,8 +316,10 @@ public static class Keybinds
             case GameAction.Crouch: return "Crouch / slide";
             case GameAction.Dash: return "Dash";
             case GameAction.Fire: return "Fire";
+            case GameAction.Scope: return "Scope (hold)";
             case GameAction.Grapple: return "Grapple";
             case GameAction.Reload: return "Reload";
+            case GameAction.Scoreboard: return "Scoreboard (hold)";
             case GameAction.Pause: return "Pause menu";
             case GameAction.ToggleControls: return "Controls card";
             case GameAction.ToggleDebug: return "Debug readout";

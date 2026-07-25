@@ -6,14 +6,21 @@ public static class PassiveChoice
     public static PassiveType Selected = PassiveType.None;
 
     // Order shown on the connect screen.
+    //
+    // Dash SHELVED (not deleted) after playtest: with the double jump's redirect+surge the
+    // two picks converged on the same job — an air-direction burst — and dash was the one
+    // with a phantom-trigger history (ramps) and a cooldown to babysit. All of its motor
+    // code (TryDash, dashSpeed/dashGain/dashCooldown, the Shift bind) is intact; restoring
+    // it is re-adding the entry below.
     public static readonly PassiveType[] Options =
     {
         PassiveType.None,
         PassiveType.Vitality,
         PassiveType.Momentum,
         PassiveType.Featherweight,
-        PassiveType.Dash,
+        // PassiveType.Dash,
         PassiveType.DoubleJump,
+        // WallJump is BASELINE now — every player wall jumps, so it is not a choice.
         PassiveType.Highground,
         PassiveType.Camper,
     };
@@ -29,6 +36,7 @@ public static class PassiveChoice
             case PassiveType.Featherweight: return "20% narrower hitbox. Harder to hit; changes no damage numbers.";
             case PassiveType.Dash: return "Shift, or Space in mid-air. Burst to 18 m/s, 1.5s cooldown.";
             case PassiveType.DoubleJump: return "One extra jump in mid-air, refunded when you land. Reach and recovery.";
+            case PassiveType.WallJump: return "Baseline for everyone — not a pick.";
             case PassiveType.Highground: return "Damage rises with altitude, up to +40% at 10m. Decks and pad apexes.";
             case PassiveType.Camper: return "2x damage while nearly still, gone above 5 m/s. Yes, really.";
             default: return "";

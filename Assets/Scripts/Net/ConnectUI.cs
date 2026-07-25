@@ -34,8 +34,20 @@ public class ConnectUI : MonoBehaviour
 
     GUIStyle label, field, button, selected, error, hint;
     Texture2D panel;
-    bool Started => InstanceFinder.NetworkManager != null &&
-                    (InstanceFinder.IsServerStarted || InstanceFinder.IsClientStarted);
+    // Through NetPresence: this is read from OnGUI, and InstanceFinder logs a stack trace
+    // every time it is asked for a manager that is not there yet — which, on the connect
+    // screen, is the normal state.
+    bool Started => NetPresence.IsRunning;
+
+    // True while the connect panel owns the screen. Read by the player components so the
+    // local player stands still behind it.
+    //
+    // SampleScene contains a scene-placed test player (the map scenes do not), so in the
+    // editor there is a fully live, fully controllable character standing behind the connect
+    // screen: you could walk, shoot and grapple around the map while "at the main menu".
+    // Freezing on this flag fixes it for every entry point at once — including the moment
+    // after Leave match, when the spawned player has not been despawned yet.
+    public static bool MenuOpen { get; private set; }
 
     // A host attempt is in flight. Without this, clicking Host again while the first attempt is
     // still resolving subscribes OnServerState a SECOND time — and every extra subscription
@@ -66,11 +78,21 @@ public class ConnectUI : MonoBehaviour
 
     // Rebind capture has to be driven from Update — see KeybindsUI.Tick. Harmless when the
     // panel is shut, and idempotent if GameMenu is ticking it in the same frame.
-    void Update() => KeybindsUI.Tick();
+    void Update()
+    {
+        KeybindsUI.Tick();
+        // Computed here rather than in OnGUI: OnGUI runs several times a frame and not at all
+        // on frames Unity skips repaint, so a flag set there would flicker.
+        MenuOpen = NetPresence.HasNetworkManager && !NetPresence.IsRunning;
+    }
+
+    void OnDisable() => MenuOpen = false;
 
     void OnGUI()
     {
-        var nm = InstanceFinder.NetworkManager;
+        // Silent probe — InstanceFinder logs a stack trace per access when no NetworkManager
+        // exists, and OnGUI runs several times a frame (see NetPresence).
+        var nm = NetPresence.Manager;
         if (nm == null) return;
 
         // Modal, and IMGUI has no notion of one: a button drawn underneath the rebinder is
@@ -107,8 +129,8 @@ public class ConnectUI : MonoBehaviour
         // and the text becomes unreadable rather than merely untidy.
         // The trailing 44 is the error line's reserved space. Reserved unconditionally rather
         // than grown on demand, so the panel does not resize under the cursor at the exact
-        // moment the player is clicking Host again.
-        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f + 44f;
+        // moment the player is clicking Host again. The extra 40 is the quit row.
+        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f + 40f + 44f;
         if (panel == null)
         {
             panel = new Texture2D(1, 1);
@@ -136,8 +158,12 @@ public class ConnectUI : MonoBehaviour
         GUI.Label(new Rect(12, 112, 300, 24), "Weapon (locked for the match)", label);
         for (int i = 0; i < LoadoutChoice.Names.Length; i++)
         {
+            // Width derived, not fixed: the Knife made this six picks and a fixed 88 ran the
+            // row off the panel. Divides whatever space the row has, so a seventh weapon fits
+            // without another layout bug.
+            float lw = (panelW - 24f - (LoadoutChoice.Names.Length - 1) * 4f) / LoadoutChoice.Names.Length;
             bool on = LoadoutChoice.WeaponIndex == i;
-            if (GUI.Button(new Rect(12 + i * 92, 138, 88, 30), LoadoutChoice.Names[i],
+            if (GUI.Button(new Rect(12 + i * (lw + 4f), 138, lw, 30), LoadoutChoice.Names[i],
                     on ? selected : button))
                 LoadoutChoice.WeaponIndex = i;
         }
@@ -165,21 +191,34 @@ public class ConnectUI : MonoBehaviour
         // Saved immediately on change, since there is no menu-close event to hook here.
         if (SettingsUI.Draw(12, 332, panelW - 24f)) GameSettings.Save();
 
+        // A way OUT of the game from the first screen. Before this, quitting a build meant
+        // Alt+F4 or joining a match purely to reach the pause menu's Quit — the playtest ask
+        // was literally "have an option to exit the game".
+        if (GUI.Button(new Rect(12, 332 + SettingsUI.Height + 10f, 160, 30), "Quit to desktop", button))
+            QuitGame();
+
         // Map. Host-only in effect: the server loads it as a global scene and clients receive
         // it when they join, so a client's selection here is ignored.
+        //
+        // The row divides the space it HAS between however many maps exist, rather than using
+        // a fixed button width: at 104 wide a third map ran off the edge of the panel, and a
+        // fourth would have been invisible entirely.
+        float mapRowX = 330f, mapRowW = panelW - mapRowX - 12f;
+        float mapBtnW = (mapRowW - (MapChoice.Names.Length - 1) * 6f) / MapChoice.Names.Length;
         for (int i = 0; i < MapChoice.Names.Length; i++)
         {
-            if (GUI.Button(new Rect(330 + i * 108, 36, 104, 28), MapChoice.Names[i],
+            if (GUI.Button(new Rect(mapRowX + i * (mapBtnW + 6f), 36, mapBtnW, 28), MapChoice.Names[i],
                     MapChoice.Index == i ? selected : button))
                 MapChoice.Index = i;
         }
 
         // Game mode. Host-only in effect — MatchManager reads this on the server and syncs it,
-        // so a client toggling it changes nothing about the match they join.
+        // so a client toggling it changes nothing about the match they join. Cycles because it
+        // is one value with three options and the panel has no room for a row.
         if (GUI.Button(new Rect(330, 72, 214, 32),
-                GameModeChoice.Pickups ? "Mode: Health + Armour" : "Mode: Pure Deathmatch",
-                GameModeChoice.Pickups ? selected : button))
-            GameModeChoice.Pickups = !GameModeChoice.Pickups;
+                GameModeChoice.Describe(GameModeChoice.ModeIndex),
+                GameModeChoice.ModeIndex != GameModeChoice.PureDeathmatch ? selected : button))
+            GameModeChoice.ModeIndex = (GameModeChoice.ModeIndex + 1) % GameModeChoice.Count;
 
         // Bots, host-only in effect like the mode above. Cycles rather than using a row of
         // buttons because it is one number with four values and the panel has no room left.
@@ -357,5 +396,16 @@ public class ConnectUI : MonoBehaviour
     {
         if (InstanceFinder.IsClientStarted) nm.ClientManager.StopConnection();
         if (InstanceFinder.IsServerStarted) nm.ServerManager.StopConnection(true);
+    }
+
+    // Same shape as GameMenu.Quit — duplicated because both are four lines and a shared
+    // "QuitHelper" for two call sites would be more file than function.
+    static void QuitGame()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 }

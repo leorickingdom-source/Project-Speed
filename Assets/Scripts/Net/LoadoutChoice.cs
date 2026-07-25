@@ -8,10 +8,20 @@
 // can check against — otherwise a client could claim any weapon's damage.
 public static class LoadoutChoice
 {
-    // Index into WeaponController.weapons. 1 = Rifle, the default starter.
+    // Index into Names / SlotIndices below — NOT directly into WeaponController.weapons.
+    // 1 = Rifle, the default starter.
     public static int WeaponIndex = 1;
 
-    public static readonly string[] Names = { "Revolver", "Rifle", "Sniper", "SMG", "Shotgun" };
+    public static readonly string[] Names = { "Revolver", "Rifle", "Sniper", "SMG", "Shotgun", "Knife" };
+
+    // Where each choice lives in WeaponController.weapons. The first five are 1:1; the Knife
+    // sits after the Rocket, which is a map pickup and therefore not on this screen. Mapped
+    // rather than assumed so appending another pickup weapon cannot silently shift the menu.
+    static readonly int[] SlotIndices = { 0, 1, 2, 3, 4, WeaponController.KnifeIndex };
+
+    // The actual weapons[] index for the current pick.
+    public static int SelectedSlot =>
+        (WeaponIndex >= 0 && WeaponIndex < SlotIndices.Length) ? SlotIndices[WeaponIndex] : 1;
 
     // Range identity, so the pick is informed. Damage numbers are close across the set —
     // what actually separates them is WHERE that damage lands.
@@ -24,6 +34,7 @@ public static class LoadoutChoice
             case 2: return "Sniper - only 40% damage under 10m, full past 25m. Deadly at range, helpless if rushed.";
             case 3: return "SMG - close-mid pressure. Full to 20m, down to 40% by 45m.";
             case 4: return "Shotgun - brutal inside 8m, nearly harmless by 20m. You must close.";
+            case 5: return "Knife - ONE HIT KILLS, reach 3.5m, no gun at all. Pure movement build: nothing at range, unanswerable up close.";
             default: return "";
         }
     }

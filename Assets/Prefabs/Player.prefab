@@ -138,14 +138,14 @@ MonoBehaviour:
   airAccel: 2
   useAirCap: 0
   airCapSpeed: 1.2
-  dashSpeed: 18
-  dashCooldown: 1.5
-  dashGrace: 0.35
+  dashSpeed: 21
+  dashCooldown: 0.9
+  dashGrace: 0.45
   gravity: 22
   jumpForce: 8
   autoBhop: 1
   airJumpCount: 1
-  airJumpForce: 7.5
+  airJumpForce: 10
   standHeight: 2
   crouchHeight: 1
   crouchSpeed: 4
@@ -213,7 +213,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   countdownPreciseUnder: 3
-  maxDisplaySpeed: 20
+  maxDisplaySpeed: 23
   barWidth: 260
   barHeight: 10
   bottomMargin: 28
@@ -362,7 +362,7 @@ MonoBehaviour:
   grappleMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  maxRange: 60
+  maxRange: 35
   pullAccel: 55
   maxPullSpeed: 32
   arriveDistance: 2.5

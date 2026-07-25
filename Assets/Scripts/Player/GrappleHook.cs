@@ -19,7 +19,11 @@ public class GrappleHook : MonoBehaviour
 
     [Header("Grapple")]
     public LayerMask grappleMask = ~0;
-    public float maxRange = 60f;
+    [Tooltip("Max anchor distance. 35 after playtest (was 60): 60 reached two-thirds of the " +
+             "Arena, so the grapple was a cross-map travel ticket — any wall, from anywhere. " +
+             "35 keeps it a local tool: you must already be near the structure you want to " +
+             "ride, so positioning still matters before the rope trivialises it.")]
+    public float maxRange = 35f;
     [Tooltip("How hard you're yanked toward the anchor (m/s^2). Higher = snappier pull.")]
     public float pullAccel = 55f;
     [Tooltip("Max reel-in speed toward the anchor (m/s).")]

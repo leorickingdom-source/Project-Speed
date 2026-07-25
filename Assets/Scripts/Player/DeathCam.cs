@@ -79,6 +79,19 @@ public class DeathCam : MonoBehaviour
     // origin puts the killer in the top half of frame and the floor in the bottom half.
     static Vector3 AimPointOf(Transform t) => t.position + Vector3.up * 1.0f;
 
+    // Late killer info. The damage report and the death itself travel as separate messages,
+    // so the camera can start with no target and learn who did it a packet later. Re-aiming
+    // mid-swing is fine — the easing in ApplyPose turns it into one continuous turn.
+    public void Retarget(Transform killerTransform, Vector3? killerPos)
+    {
+        if (!active) return;
+        killer = killerTransform;
+        if (killerTransform != null) target = AimPointOf(killerTransform);
+        else if (killerPos.HasValue) target = killerPos.Value;
+        else return;
+        haveTarget = true;
+    }
+
     public void End()
     {
         if (!active) return;

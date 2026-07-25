@@ -12,6 +12,7 @@ public enum PassiveType
     Featherweight, // narrower capsule = harder to hit (radius owned by PlayerMotor)
     Dash,          // burst move in your input direction, on a cooldown (owned by PlayerMotor)
     DoubleJump,    // one extra jump per airtime, refunded on landing (owned by PlayerMotor)
+    WallJump,      // kick off walls in mid-air, alternating surfaces (owned by PlayerMotor)
     Highground,    // damage scales with altitude (see HighgroundDamage)
     Camper,        // joke: huge damage while nearly still, gone the moment you move
 }
