@@ -30,11 +30,12 @@ public class GameMenu : MonoBehaviour
             $"{B(GameAction.Crouch)}  —  crouch · slide · crouch-jump",
             $"Mouse  —  look     {B(GameAction.Fire)}  —  fire     {B(GameAction.Reload)}  —  reload",
             $"{B(GameAction.Scope)}  —  scope (sniper)     Knife loadout: one hit kills",
-            $"{B(GameAction.Grapple)}  —  grapple, hold to reel in",
+            $"{B(GameAction.Grapple)}  —  grapple: hold to pull, aim PAST yourself to swing",
             $"{P(GameAction.Jump)} against a wall in mid-air  —  wall jump (alternate walls)",
             $"{P(GameAction.Jump)} in mid-air  —  double jump + redirect (DoubleJump passive)",
             "Deathmatch  —  one weapon, most kills wins",
             "Aim for the head (dark cap)  —  bonus damage",
+            "Speed IS damage  —  up to +25% above 9 m/s, held ~1s after you slow",
             $"{B(GameAction.Scoreboard)}  —  hold for scoreboard",
             $"{B(GameAction.ToggleControls)}  —  this card     {B(GameAction.Pause)}  —  pause",
         };

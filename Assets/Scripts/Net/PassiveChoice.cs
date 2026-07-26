@@ -16,7 +16,8 @@ public static class PassiveChoice
     {
         PassiveType.None,
         PassiveType.Vitality,
-        PassiveType.Momentum,
+        // Momentum is BASELINE now — everyone's damage scales with speed, so it is not a
+        // choice. It was the pillar of the game sitting in a slot people traded away for HP.
         PassiveType.Featherweight,
         // PassiveType.Dash,
         PassiveType.DoubleJump,
@@ -31,8 +32,8 @@ public static class PassiveChoice
         switch (t)
         {
             case PassiveType.None: return "No passive.";
-            case PassiveType.Vitality: return "+40 max HP (190). Survive a sniper body shot with room to spare.";
-            case PassiveType.Momentum: return "Damage rises with speed, up to +40% at 16 m/s. Holds ~1s after you slow.";
+            case PassiveType.Vitality: return "+40 max HP (190). Survive a sniper body shot with room to spare, and a fast revolver still needs 3.";
+            case PassiveType.Momentum: return "Baseline for everyone — not a pick. Damage rises with speed, up to +25% at 16 m/s.";
             case PassiveType.Featherweight: return "20% narrower hitbox. Harder to hit; changes no damage numbers.";
             case PassiveType.Dash: return "Shift, or Space in mid-air. Burst to 18 m/s, 1.5s cooldown.";
             case PassiveType.DoubleJump: return "One extra jump in mid-air, refunded when you land. Reach and recovery.";

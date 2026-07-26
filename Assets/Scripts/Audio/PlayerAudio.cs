@@ -25,10 +25,11 @@ public class PlayerAudio : MonoBehaviour
 
     PlayerMotor motor;
     AudioSource src;
-    AudioClip land, jump, dashClip, grappleOn, grappleOff, fireLow, fireHigh, meleeSwing;
+    AudioClip land, jump, dashClip, grappleOn, grappleOff, grappleWarn, fireLow, fireHigh, meleeSwing;
 
     bool wasGrounded;
     bool wasGrappled;
+    bool warnedThisHook;
     float lastDashCooldown;
     int lastAirJumps = -1;
     GrappleHook grapple;
@@ -51,6 +52,9 @@ public class PlayerAudio : MonoBehaviour
         dashClip = ProceduralAudio.Sweep("dash", 700f, 180f, 0.20f, 14f, 0.45f);
         grappleOn = ProceduralAudio.Tone("grapOn", 900f, 0.09f, 40f, 0.4f);
         grappleOff = ProceduralAudio.Tone("grapOff", 380f, 0.10f, 34f, 0.3f);
+        // Higher and shorter than either: a tick you notice mid-swing without mistaking it
+        // for the hook having already let go.
+        grappleWarn = ProceduralAudio.Tone("grapWarn", 1250f, 0.06f, 55f, 0.25f);
         fireLow = ProceduralAudio.Noise("fireLow", 0.13f, 40f, 0.55f);
         fireHigh = ProceduralAudio.Noise("fireHigh", 0.06f, 70f, 0.4f);
         // A downward whoosh, unlike every gunshot in the game — melee is an instant kill, so
@@ -128,9 +132,17 @@ public class PlayerAudio : MonoBehaviour
         if (grapple != null)
         {
             bool a = grapple.Attached;
-            if (a && !wasGrappled) Play(grappleOn, 1f, 0.8f);
+            if (a && !wasGrappled) { Play(grappleOn, 1f, 0.8f); warnedThisHook = false; }
             else if (!a && wasGrappled) Play(grappleOff, 1f, 0.6f);
             wasGrappled = a;
+
+            // Fires once per hook, on the way down through the threshold. A repeating beep
+            // would be noise in a 2.5 second window; one tick is a deadline.
+            if (a && !warnedThisHook && grapple.TimeLeft01 <= 0.3f)
+            {
+                warnedThisHook = true;
+                Play(grappleWarn, 1f, 0.7f);
+            }
         }
     }
 }

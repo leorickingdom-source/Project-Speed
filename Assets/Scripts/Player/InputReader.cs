@@ -14,18 +14,24 @@ public class InputReader : MonoBehaviour
     public Vector2 LookDelta { get; private set; } // mouse pixels this frame
     public Vector2 Scroll { get; private set; }    // wheel delta (reel rope)
     public bool FireHeld { get; private set; }     // reserved (weapons, P4)
-    public bool GrappleHeld { get; private set; }  // right mouse = grapple
+    public bool GrappleHeld { get; private set; }  // grapple button held
     public bool CrouchHeld { get; private set; }   // ctrl / C = crouch + slide
 
     [Tooltip("Look source, baked into the command so the sim has no hidden facing input.")]
     public MouseLook look;
 
+    [Tooltip("Weapon source, used ONLY to tell a swing apart from a shot. The sim never sees " +
+             "the weapon itself — it sees the one bit that movement cares about.")]
+    public WeaponController weapon;
+
     bool jumpBuffered;
     bool dashBuffered;
+    bool meleeBuffered;
 
     void Awake()
     {
         if (look == null) look = GetComponent<MouseLook>();
+        if (weapon == null) weapon = GetComponent<WeaponController>();
         Keybinds.Load(); // idempotent; this component can wake before any menu does
     }
 
@@ -42,7 +48,7 @@ public class InputReader : MonoBehaviour
             JumpHeld = CrouchHeld = FireHeld = GrappleHeld = false;
             LookDelta = Vector2.zero;
             Scroll = Vector2.zero;
-            jumpBuffered = dashBuffered = false;
+            jumpBuffered = dashBuffered = meleeBuffered = false;
             return;
         }
 
@@ -57,6 +63,10 @@ public class InputReader : MonoBehaviour
         if (Keybinds.Pressed(GameAction.Dash)) dashBuffered = true;
 
         FireHeld = Keybinds.Held(GameAction.Fire);
+        // Buffered like jump, and for the same reason: a tap between two fixed ticks would
+        // otherwise be dropped and the swing would keep its rope by luck of the frame timing.
+        if (Keybinds.Pressed(GameAction.Fire) && weapon != null && weapon.CurrentIsMelee)
+            meleeBuffered = true;
         GrappleHeld = Keybinds.Held(GameAction.Grapple);
         CrouchHeld = Keybinds.Held(GameAction.Crouch);
 
@@ -79,6 +89,12 @@ public class InputReader : MonoBehaviour
         return false;
     }
 
+    public bool ConsumeMelee()
+    {
+        if (meleeBuffered) { meleeBuffered = false; return true; }
+        return false;
+    }
+
     // Build one tick of movement intent for the motor (consumes the jump buffer).
     // This is the single seam between raw devices and the deterministic sim.
     public InputCmd Sample() => new InputCmd
@@ -89,6 +105,7 @@ public class InputReader : MonoBehaviour
         crouch = CrouchHeld,
         grapple = GrappleHeld,
         dashPressed = ConsumeDash(),
+        meleePressed = ConsumeMelee(),
         yaw = look != null ? look.Yaw : 0f,
         pitch = look != null ? look.Pitch : 0f,
     };

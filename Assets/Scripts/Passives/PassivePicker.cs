@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// TESTING TOOL — swap the equipped passive live with F1..F7, so feel can be A/B'd without
+// TESTING TOOL — swap the equipped passive live with F1..F6, so feel can be A/B'd without
 // leaving play mode, editing the Inspector, and re-entering. Draws a small legend top-right
 // with the active passive highlighted. Delete this component (and its script) before ship.
 //
@@ -15,11 +15,12 @@ public class PassivePicker : MonoBehaviour
 
     // Index = function key. F1 = None, then one per listed passive.
     // Dash shelved alongside its connect-screen entry — see PassiveChoice.Options.
+    // Momentum is not here either: it is baseline, so there is nothing to toggle. To A/B its
+    // feel, change maxBonus on the player's MomentumDamage instead.
     static readonly PassiveType[] Order =
     {
         PassiveType.None,
         PassiveType.Vitality,
-        PassiveType.Momentum,
         PassiveType.Featherweight,
         PassiveType.DoubleJump,
         PassiveType.Highground,
@@ -58,7 +59,7 @@ public class PassivePicker : MonoBehaviour
         }
 
         float x = Screen.width - 230f, y = 12f;
-        GUI.Label(new Rect(x, y, 230f, 22f), "PASSIVE  (F1-F7)", style);
+        GUI.Label(new Rect(x, y, 230f, 22f), $"PASSIVE  (F1-F{Order.Length})", style);
         y += 24f;
         for (int i = 0; i < Order.Length; i++)
         {

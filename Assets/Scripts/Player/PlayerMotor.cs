@@ -39,6 +39,13 @@ public class PlayerMotor : MonoBehaviour
 
     [Header("Air move (strafe-jump)")]
     public float airAccel = 2f;
+    [Tooltip("Air acceleration while a grapple is attached. Much higher than the normal air " +
+             "value, and deliberately separate from it: 2 is the Quake-ish number that makes " +
+             "strafe-jumping a skill, but on a rope it left you with no authority over the arc " +
+             "at all — the swing was whatever physics decided at the moment you attached, which " +
+             "is what read as 'stiff'. Raising only this lets you SHAPE a swing without " +
+             "touching how the air feels the rest of the time.")]
+    public float grappleAirAccel = 7f;
     public bool useAirCap = false;
     public float airCapSpeed = 1.2f;
 
@@ -70,6 +77,11 @@ public class PlayerMotor : MonoBehaviour
 
     [Header("Jump / gravity")]
     public float gravity = 22f;
+    [Tooltip("Gravity multiplier while a grapple is attached. Below 1 because the rope has to " +
+             "beat gravity to be worth firing upward: at full weight a 55 m/s^2 pull nets only " +
+             "33 upward, so climbing a rope felt like wading. Not zero — the arc of a swing IS " +
+             "gravity, and removing it would leave you flying in a straight line.")]
+    [Range(0.1f, 1f)] public float grappleGravityScale = 0.7f;
     public float jumpForce = 8f;
     public bool autoBhop = true;
     [Tooltip("Air jumps allowed by the DoubleJump passive, refunded on landing.")]
@@ -104,6 +116,11 @@ public class PlayerMotor : MonoBehaviour
     public float stanceLerp = 14f;         // how fast the capsule/eye resize
     public Transform head;                 // camera to lower (auto = child camera)
     public float standEyeHeight = 1.6f;    // camera local Y standing (captured in Awake)
+    [Tooltip("The visible body, scaled to match the crouch so other players see the stance " +
+             "they are shooting at. Auto = the child named \"Body\".")]
+    public Transform body;                 // visual capsule (auto = child "Body")
+    Vector3 bodyStandScale = Vector3.one;  // captured in Awake, so the Inspector stays the truth
+    Vector3 bodyStandPos;
     [Tooltip("Min horizontal speed to start a slide when you tap crouch.")]
     public float slideEnterSpeed = 6f;
     public float slideBoost = 1.35f;       // momentum kick on slide entry
@@ -174,6 +191,11 @@ public class PlayerMotor : MonoBehaviour
     // True while the grapple is reeling — used to drop ground-glue so it can lift you.
     bool Grappling => grapple != null && grapple.Attached;
 
+    // Did the last move get stopped by geometry? The grapple needs to know: a rope that keeps
+    // hauling on a player pinned against a wall stores up velocity that fires the instant they
+    // slide free. Set during CollideAndSlide, read by ApplyTo on the following tick.
+    public bool Blocked { get; private set; }
+
     CapsuleCollider col;
     GrappleHook grapple;
     PassiveLoadout passives;    // optional — null means base radius / no dash
@@ -210,6 +232,12 @@ public class PlayerMotor : MonoBehaviour
             if (camT != null) head = camT.transform;
         }
         if (head != null) standEyeHeight = head.localPosition.y;
+        if (body == null) body = transform.Find("Body");
+        if (body != null)
+        {
+            bodyStandScale = body.localScale;
+            bodyStandPos = body.localPosition;
+        }
         // Exclude our own layer so ground/wall casts never hit the player capsule.
         groundMask &= ~(1 << gameObject.layer);
         flow = 1f;
@@ -246,7 +274,8 @@ public class PlayerMotor : MonoBehaviour
             lastWallNormal = lastWallNormal,
         };
         if (grapple != null)
-            grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld);
+            grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld,
+                out s.grappleTimeLeft);
         return s;
     }
 
@@ -268,7 +297,7 @@ public class PlayerMotor : MonoBehaviour
         wallJumpsUsed = s.wallJumpsUsed;
         lastWallNormal = s.lastWallNormal;
         if (grapple != null)
-            grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld);
+            grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld, s.grappleTimeLeft);
         UpdateCapsule(); // collider must match the restored height before the next cast
     }
 
@@ -335,8 +364,8 @@ public class PlayerMotor : MonoBehaviour
             TryAirJump(cmd, wish);
             TryWallJump(cmd, wish);
             float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
-            Accelerate(wish, ws, airAccel, dt);
-            velocity.y -= gravity * dt;
+            Accelerate(wish, ws, Grappling ? grappleAirAccel : airAccel, dt);
+            velocity.y -= gravity * (Grappling ? grappleGravityScale : 1f) * dt;
         }
 
         // Dash lands AFTER accel/gravity so it reads as instant and full-strength; friction
@@ -351,9 +380,10 @@ public class PlayerMotor : MonoBehaviour
         {
             Vector3 eye = transform.position + Vector3.up * (standEyeHeight - (standHeight - height));
             Vector3 aimDir = Quaternion.Euler(cmd.pitch, cmd.yaw, 0f) * Vector3.forward;
-            grapple.ApplyTo(ref velocity, eye, aimDir, dt, cmd.grapple);
+            grapple.ApplyTo(ref velocity, eye, aimDir, dt, cmd.grapple, Blocked, cmd.meleePressed);
         }
 
+        Blocked = false;
         Vector3 pos = CollideAndSlide(transform.position, velocity * dt);
         Depenetrate(ref pos);
         Depenetrate(ref pos);
@@ -486,6 +516,31 @@ public class PlayerMotor : MonoBehaviour
     {
         col.height = height;
         col.center = Vector3.up * (height * 0.5f);
+        UpdateBodyVisual();
+    }
+
+    // The visible body has to crouch with the collider. It did not, and the mismatch was a
+    // shooter-grade bug rather than a cosmetic one: a crouched player still LOOKED two metres
+    // tall while their capsule was one, so shots aimed at the visible chest passed through
+    // empty air, and because Headshot.IsHead scores off COLLIDER bounds the head band sat at
+    // the visible belt line. The dark head cap made it worse by staying where it was painted
+    // (HeadCapVisual sizes it once at spawn), so the one marking that says "aim here" was
+    // pointing at a body part that could not be hit.
+    //
+    // Scaling the parent is enough for the cap too: it is parented to Body, so it rides the
+    // top of whatever height Body currently is.
+    void UpdateBodyVisual()
+    {
+        if (body == null) return;
+        // Unity's capsule mesh is 2 units tall at scale 1, and standHeight is the height that
+        // scale was authored for — so the ratio is the scale, whatever those two are set to.
+        float k = standHeight > 0.01f ? height / standHeight : 1f;
+        Vector3 s = bodyStandScale;
+        s.y = bodyStandScale.y * k;
+        body.localScale = s;
+        // Pivot is the capsule's middle, so the centre tracks half the height and the FEET
+        // stay on the floor. Anchoring the top instead would sink the model into the ground.
+        body.localPosition = new Vector3(bodyStandPos.x, height * 0.5f, bodyStandPos.z);
     }
 
     // Low friction so a slide glides; no stopSpeed floor.
@@ -746,6 +801,7 @@ public class PlayerMotor : MonoBehaviour
                     dist + skin, groundMask, QueryTriggerInteraction.Ignore)
                 && hit.collider != col)
             {
+                Blocked = true;   // read by the grapple; see the note on its swing constraint
                 float travel = Mathf.Max(hit.distance - skin, 0f);
                 pos += dir * travel;
                 Vector3 leftover = motion - dir * travel;

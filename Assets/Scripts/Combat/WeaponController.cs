@@ -153,6 +153,10 @@ public class WeaponController : MonoBehaviour
     public bool CurrentIsAmmoless => CurrentWeapon != null && CurrentWeapon.magSize <= 0;
     public bool Reloading => Time.time < reloadDoneAt;
 
+    // Knife or objective swing. Read by InputReader to decide whether a fire press is a
+    // SWING, which the grapple treats as a commitment (see GrappleHook.meleeDropsHook).
+    public bool CurrentIsMelee => CurrentWeapon != null && CurrentWeapon.kind == FireKind.Melee;
+
     // True while the scope is held on a weapon that has one. Read by SpeedFeel (camera FOV),
     // MouseLook (sensitivity) and the HUD (overlay) — the state lives here because the WEAPON
     // decides whether scoping is even possible.

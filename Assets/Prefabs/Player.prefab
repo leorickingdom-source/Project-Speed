@@ -136,12 +136,14 @@ MonoBehaviour:
   slopeLimit: 55
   groundProbe: 0.35
   airAccel: 2
+  grappleAirAccel: 7
   useAirCap: 0
   airCapSpeed: 1.2
   dashSpeed: 21
   dashCooldown: 0.9
   dashGrace: 0.45
   gravity: 22
+  grappleGravityScale: 0.7
   jumpForce: 8
   autoBhop: 1
   airJumpCount: 1
@@ -213,7 +215,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   countdownPreciseUnder: 3
-  maxDisplaySpeed: 23
+  maxDisplaySpeed: 30
   barWidth: 260
   barHeight: 10
   bottomMargin: 28
@@ -362,10 +364,17 @@ MonoBehaviour:
   grappleMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  maxRange: 35
+  maxRange: 55
   pullAccel: 55
-  maxPullSpeed: 32
-  arriveDistance: 2.5
+  maxClosingSpeed: 28
+  pullFalloffStart: 16
+  pullFalloffEnd: 30
+  releaseBoost: 5
+  releaseBoostUpScale: 0.35
+  releaseBoostMinSpeed: 6
+  attachTime: 1.8
+  arriveDistance: 2.2
+  refireDelay: 0.12
   ropeWidth: 0.06
   ropeColor: {r: 0.2, g: 0.9, b: 1, a: 1}
 --- !u!114 &4976934421120441866
@@ -444,7 +453,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b397ff7792a3a8a4b98a8a5eabb94f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MomentumDamage
-  maxBonus: 0.4
+  maxBonus: 0.25
   rampStartSpeed: 9
   fullBonusSpeed: 16
   holdTime: 1

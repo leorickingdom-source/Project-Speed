@@ -17,6 +17,7 @@ public class SpeedHud : MonoBehaviour
     public PlayerHealth health;
     public PlayerArmour armour;
     public WeaponController weapon;
+    public GrappleHook grapple;
 
     [Header("Nameplates")]
     [Tooltip("Show the names of players you can actually see.")]
@@ -49,9 +50,11 @@ public class SpeedHud : MonoBehaviour
     public float countdownPreciseUnder = 3f;
 
     [Header("Speed gauge")]
-    [Tooltip("Speed the bar reads as full. 23 sits just above the dash (21 + gain) and slide " +
-             "ceiling (16) — a pegged bar reads as a broken bar.")]
-    public float maxDisplaySpeed = 23f;
+    [Tooltip("Speed the bar reads as full. 30 covers what the grapple actually produces — a " +
+             "measured swing exits around 23 from a standing start and past 33 when entered " +
+             "fast. At 23 the bar pegged for most of every hook, and a pegged bar is not a " +
+             "gauge. The tick still marks groundSpeed, so everything past it is earned.")]
+    public float maxDisplaySpeed = 30f;
     public float barWidth = 260f;
     public float barHeight = 10f;
     [Tooltip("Bottom margin in pixels.")]
@@ -99,6 +102,7 @@ public class SpeedHud : MonoBehaviour
         if (health == null && motor != null) health = motor.GetComponent<PlayerHealth>();
         if (armour == null && motor != null) armour = motor.GetComponent<PlayerArmour>();
         if (weapon == null && motor != null) weapon = motor.GetComponent<WeaponController>();
+        if (grapple == null && motor != null) grapple = motor.GetComponent<GrappleHook>();
 
         pixel = new Texture2D(1, 1);
         pixel.SetPixel(0, 0, Color.white);
@@ -390,6 +394,7 @@ public class SpeedHud : MonoBehaviour
             }
         }
 
+        DrawHookTimer(sw, sh);
         DrawMobilityPerk(barX, barY);
         DrawNameplates();
         DrawPing();
@@ -430,6 +435,27 @@ public class SpeedHud : MonoBehaviour
         Box(cx - 0.5f, cy - 60f, 1f, 44f, line);   // top
         Box(cx - 0.5f, cy + 16f, 1f, 44f, line);   // bottom
         Box(cx - 1f, cy - 1f, 2f, 2f, line);       // centre pip
+    }
+
+    // Hook time as a draining bar just under the crosshair. The rope already frays as it runs
+    // out, but that is peripheral and approximate — while swinging you are looking where you
+    // are GOING, not at the rope. This is the precise version, in the one place already being
+    // looked at, and it exists only while a hook is live so it costs nothing the rest of the
+    // time.
+    void DrawHookTimer(float sw, float sh)
+    {
+        if (grapple == null || !grapple.Attached) return;
+
+        float t = grapple.TimeLeft01;
+        const float w = 54f, h = 3f;
+        float x = (sw - w) * 0.5f, y = sh * 0.5f + 26f;
+
+        Box(x - 1f, y - 1f, w + 2f, h + 2f, new Color(0f, 0f, 0f, 0.5f));
+        // Matches the rope: cyan while you have room, red as it expires, so the two cues are
+        // obviously the same information rather than two things to learn.
+        Color c = Color.Lerp(new Color(1f, 0.35f, 0.25f), new Color(0.2f, 0.9f, 1f),
+                             Mathf.Clamp01(t / 0.45f));
+        Box(x, y, w * t, h, c);
     }
 
     static readonly Color ArmourTint = new Color(0.45f, 0.72f, 1f);

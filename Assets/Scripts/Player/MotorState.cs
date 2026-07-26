@@ -38,4 +38,5 @@ public struct MotorState
     public bool grappleAttached;
     public Vector3 grappleAnchor;
     public bool grappleHeld;      // edge-detect state; without it a replay can re-fire a press
+    public float grappleTimeLeft; // seconds of hook remaining; counts down every attached tick
 }

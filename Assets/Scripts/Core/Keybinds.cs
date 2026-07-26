@@ -119,6 +119,13 @@ public static class Keybinds
             binds[(int)GameAction.Grapple, 1] = Bind.FromKey(Key.LeftShift);
         }
 
+        // Migration: profiles from the Shift-alternate layout keep Shift on the grapple, which
+        // was half of a chord that was impossible to hold. Move that slot to Q.
+        var shift = Bind.FromKey(Key.LeftShift);
+        for (int slot = 0; slot < SlotCount; slot++)
+            if (binds[(int)GameAction.Grapple, slot].Equals(shift))
+                binds[(int)GameAction.Grapple, slot] = Bind.FromKey(Key.Q);
+
         loaded = true;
         Version++;
     }
@@ -161,12 +168,14 @@ public static class Keybinds
         binds[(int)GameAction.Fire, 0] = Bind.FromMouse(0);
         binds[(int)GameAction.Scope, 0] = Bind.FromMouse(1);   // right mouse — the instinct
 
-        // Grapple moves to the thumb button. It is HELD to reel, which is what side buttons
-        // are good at, and it keeps the index finger free for fire and scope. Shift is the
-        // alternate for anyone on a three-button mouse, and it is free now that Dash is
-        // shelved — see PassiveChoice.
-        binds[(int)GameAction.Grapple, 0] = Bind.FromMouse(3); // Mouse4
-        binds[(int)GameAction.Grapple, 1] = Bind.FromKey(Key.LeftShift);
+        // Grapple on Q, reel on E, thumb button as the grapple alternate.
+        //
+        // The rope needs two inputs held together — swing and wind-in — and the previous
+        // layout put them on Shift and Ctrl, which is the same pinky twice. Q and E are two
+        // different fingers that are already resting next to WASD, so the chord is physically
+        // possible at speed. Mouse4 stays on the grapple for anyone who prefers the thumb.
+        binds[(int)GameAction.Grapple, 0] = Bind.FromKey(Key.Q);
+        binds[(int)GameAction.Grapple, 1] = Bind.FromMouse(3); // Mouse4
         loaded = true; // a reset is a fully-formed set; a later Load must not clobber it
         Version++;
 
@@ -317,7 +326,7 @@ public static class Keybinds
             case GameAction.Dash: return "Dash";
             case GameAction.Fire: return "Fire";
             case GameAction.Scope: return "Scope (hold)";
-            case GameAction.Grapple: return "Grapple";
+            case GameAction.Grapple: return "Grapple (hold)";
             case GameAction.Reload: return "Reload";
             case GameAction.Scoreboard: return "Scoreboard (hold)";
             case GameAction.Pause: return "Pause menu";
