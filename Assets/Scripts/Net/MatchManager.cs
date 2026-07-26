@@ -226,12 +226,24 @@ public class MatchManager : NetworkBehaviour
         ballSpawnResolved = false;
         rocketSpawnResolved = false;
         flashAnchorsResolved = false;
-        // IsSpawned FIRST: this callback fires during the scene load, which on a client
-        // joining mid-flight happens before FishNet has initialised this behaviour — and
-        // IsServerStarted dereferences the NetworkManager cache that initialisation sets,
-        // so asking it early threw a NullReferenceException every single scene load.
-        // Skipping the reset when unspawned costs nothing: OnStartServer runs both anyway.
-        if (IsSpawned && IsServerStarted) { ResetOddball(); ResetFlashpoint(); }
+        // NetPresence FIRST, then IsSpawned, then IsServerStarted — each guard covers a
+        // failure the next one cannot.
+        //
+        // IsSpawned before IsServerStarted: this callback fires during the scene load, which
+        // on a client joining mid-flight happens before FishNet has initialised this
+        // behaviour, and IsServerStarted dereferences the NetworkManager cache that
+        // initialisation sets.
+        //
+        // HasNetworkManager before BOTH: IsSpawned is not the safe question it looks like.
+        // Press Play with a MAP scene open instead of the boot scene and there is no
+        // NetworkManager anywhere, so IsSpawned itself throws inside FishNet — an NRE per
+        // scene load, from the guard that was supposed to prevent one. Costs nothing in a
+        // real match, where the manager always exists by the time a map loads.
+        if (NetPresence.HasNetworkManager && IsSpawned && IsServerStarted)
+        {
+            ResetOddball();
+            ResetFlashpoint();
+        }
     }
 
     // Client-side copy of the same clock. resetAt is only ever written by the server, so a
