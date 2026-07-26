@@ -241,6 +241,44 @@ Small fix, but load-bearing for any VPS route.
 
 ---
 
+## 4b. Open: speed above 16 m/s buys nothing in a fight
+
+Surfaced 2026-07-27 while adding Slipstream, from the question "Highground and Slipstream seem
+the same?". They are not — but the answer exposed something worse than an overlap.
+
+`MomentumDamage` ramps from `rampStartSpeed` 9 to `fullBonusSpeed` **16**, and the BASE air
+ceiling is `groundSpeed * flowMax` = 9 × 1.8 = **16.2**. The damage bonus is therefore maxed out
+by ordinary flow, and every metre per second past it is worth nothing:
+
+| source | speed | damage bonus |
+|---|---|---|
+| slide | 16 | 0.25 (max) |
+| bhop | 16.2 | 0.25 |
+| Slipstream ceiling | 18.5 | 0.25 |
+| grapple closing cap | 28 | 0.25 |
+| rocket-jump launch | ~24 vertical | 0.25 |
+
+So the game's three signature verbs — grapple, rocket jump, slingshot release — are **damage
+neutral**. "More movement -> more speed -> more power" holds only up to the speed a slide already
+gives you. Everything above that buys position and time, which is real, but it is not the loop
+the game says it runs on.
+
+Three ways out, in the order I would consider them:
+
+1. **Second tier.** Keep 0.25 at 16, then a smaller bonus continuing to ~28. Nothing existing is
+   nerfed; the cost is a curve with two segments to explain.
+2. **Leave it, and say so.** Declare 16 the "you are moving properly" line and let everything
+   above it pay in position rather than damage. Slipstream is then honestly a mobility pick and
+   Highground remains the damage-by-place option. Cheapest, and defensible.
+3. **Extend the ramp** — `fullBonusSpeed` 16 → ~26. Avoid: it pays for the rare case by taxing
+   the common one. At 16 the bonus would fall 0.25 → ~0.18, so sliding play gets worse to make
+   flying play better.
+
+Not urgent. It becomes urgent the moment someone asks why the grapple does not make them hit
+harder, because the connect screen tells every player that speed is damage.
+
+---
+
 ## 5. Placeholders and small gaps
 
 - **Armour pickup is a primitive cube.** Reads as clearly *not a sphere*, which was the point,

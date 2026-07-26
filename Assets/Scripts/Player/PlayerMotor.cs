@@ -145,6 +145,14 @@ public class PlayerMotor : MonoBehaviour
              "On: you reach groundSpeed*flowMax just by running, and hopping stops mattering.")]
     public bool flowRaisesGroundCap = false;
     public float flowMax = 1.8f;          // air top speed = groundSpeed * this
+    [Tooltip("flowMax while the Slipstream passive is equipped. 2.05 against 1.8 is 18.5 m/s " +
+             "instead of 16.2. NOTE this is mobility ONLY, not damage: MomentumDamage saturates " +
+             "at fullBonusSpeed 16, which the base ceiling of 16.2 already clears, so every " +
+             "metre per second above it is worth nothing in a fight. That is a gap in the speed " +
+             "-> power loop rather than a property of this passive — the grapple's 28 and a " +
+             "rocket jump's launch hit the same wall. Small on purpose either way: flow has to " +
+             "be EARNED by moving, so this raises the roof, not the floor.")]
+    public float slipstreamFlowMax = 2.05f;
     public float flowGainPerSec = 0.45f;  // how fast it builds while moving
     public float flowDecayPerSec = 1.5f;  // how fast it bleeds when slow on ground
     public float flowMoveThreshold = 4f;  // speed above which flow builds
@@ -189,7 +197,18 @@ public class PlayerMotor : MonoBehaviour
     public bool ExternallyDriven { get; set; }
 
     // True while the grapple is reeling — used to drop ground-glue so it can lift you.
+    //
+    // ANY attached hook drops the glue, at any angle, deliberately: an angle gate was tried on
+    // 2026-07-27 (lift only above ~11 degrees) to stop the landing-sound stutter and REVERTED
+    // the same day — peeling off the floor from a shallow rope is the Apex feel this grapple
+    // is built on, and gating it made the rope feel like it only worked when aimed upward.
+    // The stutter it caused is handled where it belongs, in PlayerAudio's edge filters.
     bool Grappling => grapple != null && grapple.Attached;
+
+    // Seconds of airtime that ended with the most recent landing. Audio reads it to tell a real
+    // landing from the flicker a rope or a ramp produces; the sim never does, so it is
+    // deliberately not in MotorState.
+    public float LastAirTime { get; private set; }
 
     // Did the last move get stopped by geometry? The grapple needs to know: a rope that keeps
     // hauling on a player pinned against a wall stores up velocity that fires the instant they
@@ -208,6 +227,7 @@ public class PlayerMotor : MonoBehaviour
     Vector3 lastWallNormal;     // ditto: which wall the last kick came off
     bool hasDash;               // resolved once in Awake
     bool hasDoubleJump;
+    bool hasSlipstream;         // ditto — raises the flow ceiling, see UpdateFlow
 
     // How long you must be continuously airborne before the AIR-ONLY verbs (space-dash,
     // double jump) unlock. Exists because GroundCheck calls a climb "airborne": walking up a
@@ -329,6 +349,10 @@ public class PlayerMotor : MonoBehaviour
         {
             airJumpsUsed = 0; // refunded by touching ground
             wallJumpsUsed = 0;
+            // How long the airtime that just ended was. Audio-only: PlayerAudio uses it to tell
+            // a real landing from the centimetre-high flicker a rope or a ramp produces, which
+            // it cannot ask about after the fact because the next line erases it.
+            if (airTime > 0f) LastAirTime = airTime;
             airTime = 0f;     // ramp flicker regrounds every tick, so this never accumulates
             if (sliding)
             {
@@ -364,7 +388,8 @@ public class PlayerMotor : MonoBehaviour
             TryAirJump(cmd, wish);
             TryWallJump(cmd, wish);
             float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
-            Accelerate(wish, ws, Grappling ? grappleAirAccel : airAccel, dt);
+            if (Grappling) AccelerateOnRope(wish, ws, grappleAirAccel, dt);
+            else Accelerate(wish, ws, airAccel, dt);
             velocity.y -= gravity * (Grappling ? grappleGravityScale : 1f) * dt;
         }
 
@@ -395,7 +420,9 @@ public class PlayerMotor : MonoBehaviour
     {
         if (Speed > flowMoveThreshold) flow += flowGainPerSec * dt;
         else if (grounded) flow -= flowDecayPerSec * dt;
-        flow = Mathf.Clamp(flow, 1f, flowMax);
+        // Ceiling resolved from the passive, like Radius is — never asked per tick from
+        // PassiveLoadout, so the sim stays free of lookups and both machines agree.
+        flow = Mathf.Clamp(flow, 1f, hasSlipstream ? slipstreamFlowMax : flowMax);
     }
 
     // Crouch / slide state machine. Hold (or tap) crouch while moving fast on the
@@ -503,6 +530,7 @@ public class PlayerMotor : MonoBehaviour
             ? featherweightRadius : radius;
         hasDash = passives != null && passives.Has(PassiveType.Dash);
         hasDoubleJump = passives != null && passives.Has(PassiveType.DoubleJump);
+        hasSlipstream = passives != null && passives.Has(PassiveType.Slipstream);
         col.radius = Radius;
         UpdateCapsule();
     }
@@ -625,6 +653,50 @@ public class PlayerMotor : MonoBehaviour
         float accelSpeed = Mathf.Min(accel * wishSpeed * dt, add);
         velocity.x += wishDir.x * accelSpeed;
         velocity.z += wishDir.z * accelSpeed;
+    }
+
+    // Air control while a rope is attached, in the rope's frame instead of the world's.
+    //
+    // The bug this fixes: holding W on a rope made you SLOWER, which is the opposite of what
+    // every player expects and the opposite of what letting go of the keyboard did. Plain
+    // Accelerate pushes along your horizontal facing, so aiming at an anchor above you and
+    // holding W poured speed straight down the rope — and every part of the grapple treats
+    // closing speed as the thing to spend, not the thing to build:
+    //
+    //   * maxClosingSpeed saw the closing speed you added and cancelled the pull's radial part
+    //   * the pull's falloff reads TOTAL speed, so the W speed weakened the rope as well
+    //   * arriveDistance came up sooner, so the hook let go early — mid-slingshot
+    //
+    // Three separate systems all reading the same input as "I want to arrive", when what the
+    // player meant was "I want to go faster".
+    //
+    // So: strip the radial component out of the wish direction. What is left is tangential —
+    // the direction a pendulum is pumped in — which is exactly the speed a slingshot converts
+    // into distance on release. Pressing straight at the anchor now does NOTHING rather than
+    // something harmful, which is the honest outcome: the rope owns how fast you close on it.
+    //
+    // 3D on purpose, unlike Accelerate: the tangent of a rope you are hanging under is mostly
+    // horizontal, but the tangent of one you are swinging past is not, and flattening it to
+    // x/z would quietly delete the vertical half of every arc.
+    void AccelerateOnRope(Vector3 wishDir, float wishSpeed, float accel, float dt)
+    {
+        if (wishDir == Vector3.zero) return;
+
+        Vector3 toAnchor = grapple.Anchor - (transform.position + Vector3.up * (height * 0.5f));
+        if (toAnchor.sqrMagnitude < 0.01f) return;
+        Vector3 rope = toAnchor.normalized;
+
+        Vector3 tangent = wishDir - rope * Vector3.Dot(wishDir, rope);
+        // Nearly parallel to the rope: the player is asking to be reeled in or pushed away,
+        // and neither is theirs to ask for. Bail rather than normalising noise into a
+        // direction, which would make the arc jitter when you aim near the anchor.
+        if (tangent.sqrMagnitude < 1e-4f) return;
+        tangent.Normalize();
+
+        float current = Vector3.Dot(velocity, tangent);
+        float add = wishSpeed - current;
+        if (add <= 0f) return;
+        velocity += tangent * Mathf.Min(accel * wishSpeed * dt, add);
     }
 
     // Ground friction only — none in air, so bunnyhopping keeps speed.

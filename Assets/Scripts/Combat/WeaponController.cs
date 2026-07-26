@@ -66,6 +66,12 @@ public class Weapon
     public float projectileRadius = 0.15f;
     public float blastRadius = 5f;
     public float blastDamage = 90f;
+    [Tooltip("Extra damage for hitting a target with the projectile ITSELF, on top of the blast " +
+             "it is standing in. 0 = splash only. Without it a rocket is worth the same whether " +
+             "you led the shot or missed by a metre, because a 'direct hit' is just splash at " +
+             "distance zero — and the blast centre sits outside the victim's capsule anyway, so " +
+             "even a perfect hit only scored 0.87 falloff.")]
+    public float directDamage = 0f;
     public float blastForce = 16f;     // knockback to others
     public float selfForce = 24f;      // your own rocket-jump kick
     [Tooltip("Fraction of your own blast you take. Quake halves it so rocket-jumping is " +
@@ -94,8 +100,11 @@ public class WeaponController : MonoBehaviour
     [Header("Loadout")]
     public Weapon[] weapons;            // auto-filled with the default 5 if left empty
     [Tooltip("Index into weapons[] that everyone spawns holding. 0 Revolver, 1 Rifle, 2 Sniper, " +
-             "3 SMG, 4 Shotgun.")]
-    public int startingWeapon = 1;
+             "3 SMG, 4 Shotgun, 5 Rocket. Only the OFFLINE path uses this — networked play is " +
+             "overwritten by SetLockedWeapon with the connect-screen pick. It was 1, the Rifle, " +
+             "which is now shelved from the menu, so editor testing was handing out a weapon no " +
+             "player can choose.")]
+    public int startingWeapon = 0;
     [Tooltip("Off = deathmatch with a single weapon: the number keys do nothing and you keep " +
              "what you spawned with. Turn on to restore 1-5 switching once map pickups exist.")]
     public bool allowWeaponSwitching = false;
@@ -127,6 +136,10 @@ public class WeaponController : MonoBehaviour
         if (weapons == null || weapons.Length == 0) return;
         Current = lockedIndex = Mathf.Clamp(index, 0, weapons.Length - 1);
         reloadDoneAt = 0f;
+        // Awake empties the launcher because it is a pickup for everyone else. If it is your
+        // PICK, this is the moment that stops being true — without it you would spawn holding
+        // an empty tube and have to press R before you could move.
+        if (lockedIndex == RocketIndex) weapons[RocketIndex].ammo = weapons[RocketIndex].magSize;
         // Start() may not have run yet when this arrives; Start re-applies visibility too.
         if (knifeView != null) knifeView.SetVisible(Current == KnifeIndex);
     }
@@ -246,8 +259,11 @@ public class WeaponController : MonoBehaviour
         // four rockets at spawn. They were unreachable (nothing switches to it without a
         // pickup) so nothing visibly broke — but the first pickup of the match would then
         // grant rockets on top of a tube that was never supposed to have any.
-        if (RocketIndex < weapons.Length) weapons[RocketIndex].ammo = 0;
         Current = lockedIndex = Mathf.Clamp(startingWeapon, 0, weapons.Length - 1);
+        // Emptied unless the launcher is the loadout — offline play sets that through
+        // startingWeapon, networked play through SetLockedWeapon, so both paths need the check.
+        if (RocketIndex < weapons.Length && lockedIndex != RocketIndex)
+            weapons[RocketIndex].ammo = 0;
     }
 
     // The viewmodel is built here rather than placed on the prefab so it can never be half
@@ -395,15 +411,42 @@ public class WeaponController : MonoBehaviour
         //              tracer = new Color(0.70f, 0.65f, 0.55f),
         //              magSize = 8, reloadTime = 1.5f },
 
-        // Rocket — BACK, but as a MAP PICKUP only (see RocketIndex / GiveRocket). It was
-        // shelved because rocket-jumping-as-baseline is a Quake signature this game diverges
-        // from; a 4-rocket pickup on a 30s timer is a different thing — a temporary power
-        // spike you fight over, not a movement economy. Appended at the END so the
-        // connect-screen indices 0-4 and every saved loadout keep meaning what they meant.
+        // Rocket — now BOTH a connect-screen loadout AND the map pickup, and the two are the
+        // same weapon behaving differently on purpose.
+        //
+        // It was pickup-only because rocket-jumping-as-baseline is a Quake signature this game
+        // diverges from. What that missed: the launcher is the easiest speed in the game, and
+        // hiding it behind a 30s map timer meant the easiest speed was also the rarest. As a
+        // PICK it costs you a gun — 4 tubes, a 2.6s reload and 0.9s between shots against
+        // someone holding a rifle — so choosing it is choosing mobility over rate of fire,
+        // which is the same trade the Knife makes at the other extreme.
+        //
+        // Which behaviour you get keys off lockedIndex, not off Current:
+        //   loadout rocket  -> reloads on R, refills on respawn
+        //   pickup rocket   -> never reloads, dies with you, and hands your own gun back when
+        //                      the tube runs dry (that is the power spike the map fights over)
+        // Its weapons[] slot stays 5, so nothing that stores an index has to move.
+        // projectileSpeed 40 -> 60. Quake's rocket is ~23 m/s and everything in that game moves
+        // at roughly half our speeds; 40 was slower than Quake in relative terms, which made a
+        // rocket at range a suggestion — a target sliding at 16 or swinging at 30 simply left
+        // before it arrived, and 55m took 1.4s to cross. 60 makes that 0.9s. Deliberately still
+        // dodgeable at distance: splash plus a hitscan-fast projectile would make the launcher
+        // the best gun at every range instead of the mobility pick with a punishing miss.
+        // Rocket-jumping is unaffected either way — the floor is 1m from the muzzle.
+        // directDamage 40: a centre-mass hit is ~78 of splash, so 118 total against 150 HP.
+        // Deliberately NOT lethal on its own — a direct hit plus any chip damage kills, which
+        // makes the airshot the moment it should be without turning every connected rocket
+        // into a one-shot. Never applies to the shooter, so rocket jumps cost the same 31.
         new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true, cycle = 0.9f,
-                     projectileSpeed = 40f, blastRadius = 5f, blastDamage = 90f, blastForce = 16f, selfForce = 24f,
+                     projectileSpeed = 60f, blastRadius = 5f, blastDamage = 90f, directDamage = 40f,
+                     blastForce = 16f, selfForce = 24f,
+                     // 0.35, not Quake's 0.5. Quake hands you armour shards and a health pickup
+                     // on every corner; this game has NO regen of any kind, so a 45-per-jump
+                     // tax turned the mobility tool into a countdown. 31 still costs a fifth of
+                     // your health for a launch that clears 13m.
+                     selfDamageScale = 0.35f,
                      tracer = new Color(1.00f, 0.50f, 0.15f),
-                     magSize = 4, reloadTime = 999f }, // never reloads — empty means it's gone
+                     magSize = 4, reloadTime = 2.6f },
 
         // Knife — a PRIMARY loadout, picked on the connect screen like any gun and locked for
         // the match. Not a sidearm everyone carries: that version let a rifle player keep the
@@ -508,9 +551,10 @@ public class WeaponController : MonoBehaviour
                     Fire(w);
                     w.ammo--;
                     nextFire = Time.time + w.cycle;
-                    // Last rocket out -> the pickup is spent, back to your own gun. No reload
-                    // path for rockets: more of them come from the map, not from R.
-                    if (Current == RocketIndex && w.ammo <= 0)
+                    // Last rocket out -> the PICKUP is spent, back to your own gun. Skipped when
+                    // the launcher IS your gun: there is nothing to hand back, and the empty
+                    // tube should reload instead (see the else branch below).
+                    if (Current == RocketIndex && w.ammo <= 0 && lockedIndex != RocketIndex)
                     {
                         Current = lockedIndex;
                         // ...and put the viewmodel back with it. A Knife player who spent a
@@ -530,7 +574,10 @@ public class WeaponController : MonoBehaviour
 
     void StartReload()
     {
-        if (Current == RocketIndex) return; // rockets are refilled by the map, not by R
+        // A PICKUP launcher is refilled by the map, not by R. A launcher you chose on the
+        // connect screen is your gun and reloads like one — same slot, told apart by whether
+        // it is what you locked in.
+        if (Current == RocketIndex && lockedIndex != RocketIndex) return;
         var w = CurrentWeapon;
         if (w != null && !Reloading && w.ammo < w.magSize)
         {
@@ -554,8 +601,11 @@ public class WeaponController : MonoBehaviour
         Current = lockedIndex;
         preBallIndex = lockedIndex;   // stale value here would hand back a spent launcher
 
-        // Unspent rockets die with you: the pickup is earned per life, like armour.
-        if (RocketIndex < weapons.Length) weapons[RocketIndex].ammo = 0;
+        // Unspent PICKUP rockets die with you: the pickup is earned per life, like armour. A
+        // loadout launcher respawns loaded, like every other gun (the loop above already did
+        // it, so this only has to leave it alone).
+        if (RocketIndex < weapons.Length && lockedIndex != RocketIndex)
+            weapons[RocketIndex].ammo = 0;
 
         // Viewmodel follows the LOADOUT, not a swap. This used to force it off, which left a
         // Knife player respawning empty-handed — holding the knife, swinging it, killing with
@@ -800,6 +850,7 @@ public class WeaponController : MonoBehaviour
         rocket.blastRadius = w.blastRadius;
         rocket.damage = w.blastDamage;
         rocket.blastForce = w.blastForce;
+        rocket.directDamage = w.directDamage;
         rocket.selfForce = w.selfForce;
         rocket.selfDamageScale = w.selfDamageScale;
         rocket.damageScale = damageScale; // sampled at launch — the shooter's speed when firing

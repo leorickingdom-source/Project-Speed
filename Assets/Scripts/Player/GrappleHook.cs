@@ -99,6 +99,28 @@ public class GrappleHook : MonoBehaviour
              "grab the surface you were about to fly past.")]
     public float refireDelay = 0.12f;
 
+    [Header("Hookweaver passive")]
+    // The movement pick, in a set where wall jump, Momentum and the grapple itself are all
+    // baseline and DoubleJump was the only choice that touched movement at all. Built entirely
+    // out of the two numbers already tuned above rather than a new verb: more rope, sooner.
+    [Tooltip("attachTime while Hookweaver is equipped. 2.6 against the baseline 1.8 is roughly " +
+             "one more swing per hook — enough to chain across a gap that otherwise needs the " +
+             "floor in between.")]
+    public float hookweaverAttachTime = 2.6f;
+    [Tooltip("refireDelay while Hookweaver is equipped. Halved, so a held button catches the " +
+             "next surface almost immediately and chaining stops depending on how cleanly you " +
+             "release.")]
+    public float hookweaverRefireDelay = 0.06f;
+
+    // Resolved once in Awake and again whenever the loadout changes, never asked per tick:
+    // PassiveLoadout raises Changed for exactly this, and a per-tick Has() inside the sim
+    // would be a hash lookup on the hot path for a value that changes at most once a match.
+    bool hasHookweaver;
+    PassiveLoadout passives;
+
+    float AttachTime => hasHookweaver ? hookweaverAttachTime : attachTime;
+    float RefireDelay => hasHookweaver ? hookweaverRefireDelay : refireDelay;
+
     [Tooltip("Ceiling on how fast you may CLOSE on a hooked PLAYER, replacing maxClosingSpeed " +
              "for actor hooks. Separate because reeling in on a person is not the same act as " +
              "reeling in on a wall: at the map's 28 the rope was a free assassination — hook, " +
@@ -155,7 +177,7 @@ public class GrappleHook : MonoBehaviour
 
     // 0..1 of the hook's life remaining. The one number the cues are built from, so the rope,
     // the HUD and the warning tone can never disagree about how long you have.
-    public float TimeLeft01 => attachTime > 0f ? Mathf.Clamp01(TimeLeft / attachTime) : 0f;
+    public float TimeLeft01 => AttachTime > 0f ? Mathf.Clamp01(TimeLeft / AttachTime) : 0f;
 
     // Snapshot / restore for reconciliation — the motor folds these into MotorState so a
     // corrected client replays with the rope in exactly the state the server had.
@@ -220,12 +242,28 @@ public class GrappleHook : MonoBehaviour
             var c = GetComponentInChildren<Camera>();
             if (c != null) aim = c.transform;
         }
+        passives = GetComponent<PassiveLoadout>();
+        if (passives != null) passives.Changed += ApplyPassives;
+        ApplyPassives();
         // NOTE: the player layer is deliberately NOT stripped from grappleMask any more. It
         // used to be — "never grapple ourselves" — but that excluded the whole LAYER, which is
         // every other player too, so hooking a person was impossible by construction. Self is
         // now excluded per-hit by transform root instead, the same fix WeaponController's
         // hitscan already uses for the same reason.
         SetupLine();
+    }
+
+    void OnDestroy()
+    {
+        if (passives != null) passives.Changed -= ApplyPassives;
+    }
+
+    // Mirrors PlayerMotor.ApplyPassives: the synced pick is the source of truth, and both
+    // machines resolve the same booleans from it, so a hook lasts the same length on the
+    // server as it does on the client that fired it.
+    void ApplyPassives()
+    {
+        hasHookweaver = passives != null && passives.Has(PassiveType.Hookweaver);
     }
 
     void SetupLine()
@@ -364,7 +402,7 @@ public class GrappleHook : MonoBehaviour
         Attached = false;
         anchorTarget = null;      // or the next hook keeps riding the last person you held
         anchorHealth = null;
-        refireAt = Time.time + refireDelay;
+        refireAt = Time.time + RefireDelay;
     }
 
     void TryAttach(Vector3 origin, Vector3 dir)
@@ -406,7 +444,7 @@ public class GrappleHook : MonoBehaviour
         anchorTarget = bestActor;
         anchorOffset = bestActor != null ? hits[best].point - bestActor.position : Vector3.zero;
         anchorHealth = bestActor != null ? bestActor.GetComponentInParent<PlayerHealth>() : null;
-        TimeLeft = attachTime;
+        TimeLeft = AttachTime;
     }
 
     void LateUpdate()

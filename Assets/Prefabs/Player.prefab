@@ -395,7 +395,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   weapons: []
-  startingWeapon: 1
+  startingWeapon: 0
   allowWeaponSwitching: 0
   headMultiplier: 2
   headFraction: 0.28

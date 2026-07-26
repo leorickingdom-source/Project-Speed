@@ -19,6 +19,17 @@ public class PlayerAudio : MonoBehaviour
 {
     [Header("Mix")]
     [Range(0f, 1f)] public float volume = 0.5f;
+
+    [Header("Edge filters")]
+    [Tooltip("Airtime a fall must have had before landing makes a sound. 0.08s is just above " +
+             "AirVerbDelay's 0.06 — the same flicker window the movement verbs already ignore — " +
+             "so a real hop still lands audibly and a rope bouncing you a few centimetres does " +
+             "not. 0 restores a sound on every ground edge.")]
+    public float minAirTimeForLand = 0.08f;
+    [Tooltip("Upward speed a leaving edge needs before it counts as a jump. A real jump leaves " +
+             "at jumpForce (8); ramp and rope flicker leave at barely over 1, which is the " +
+             "threshold GroundCheck itself uses.")]
+    public float minRiseForJump = 3f;
     [Tooltip("Distance at which a sound is no longer audible. The arena is 90m across, so " +
              "60 lets you hear most of it while still fading with distance.")]
     public float maxDistance = 60f;
@@ -100,13 +111,20 @@ public class PlayerAudio : MonoBehaviour
 
         // Landing: detect the air->ground edge. Loud in proportion to impact so a big fall
         // reads differently from stepping off a crate.
+        //
+        // Both edges are FILTERED, because `grounded` is not a reliable statement about
+        // whether you left the floor. GroundCheck calls a rising tick airborne, so a ramp
+        // climb or a rope pulling on you flickers it several times a second — and the audio
+        // used to announce every one of those as a jump followed by a landing. The movement
+        // verbs already ignore this flicker via AirVerbDelay; these two are the same idea
+        // applied to sound: a landing needs airtime behind it, and a jump needs real lift.
         bool g = motor.grounded;
-        if (g && !wasGrounded)
+        if (g && !wasGrounded && motor.LastAirTime >= minAirTimeForLand)
         {
             float impact = Mathf.InverseLerp(2f, 18f, Mathf.Abs(motor.velocity.y));
             Play(land, Random.Range(0.92f, 1.08f), 0.5f + impact * 0.8f);
         }
-        else if (!g && wasGrounded)
+        else if (!g && wasGrounded && motor.velocity.y > minRiseForJump)
         {
             Play(jump, Random.Range(0.95f, 1.05f), 0.7f);
         }

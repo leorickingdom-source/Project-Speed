@@ -24,6 +24,10 @@ public static class PassiveChoice
         // WallJump is BASELINE now — every player wall jumps, so it is not a choice.
         PassiveType.Highground,
         PassiveType.Camper,
+        PassiveType.Bloodrush,
+        PassiveType.Hookweaver,
+        PassiveType.KineticPlating,
+        PassiveType.Slipstream,
     };
 
     // One line each — enough to pick without reading code.
@@ -40,6 +44,10 @@ public static class PassiveChoice
             case PassiveType.WallJump: return "Baseline for everyone — not a pick.";
             case PassiveType.Highground: return "Damage rises with altitude, up to +40% at 10m. Decks and pad apexes.";
             case PassiveType.Camper: return "2x damage while nearly still, gone above 5 m/s. Yes, really.";
+            case PassiveType.Bloodrush: return "Kills restore 30 HP. The only sustain in the game that is not a pickup — finish fights and you keep going.";
+            case PassiveType.Hookweaver: return "Hooks last 2.6s instead of 1.8, and re-hook twice as fast. Chain swings across gaps that otherwise need the floor.";
+            case PassiveType.KineticPlating: return "Your own blasts hurt you half as much; the launch is unchanged. Rocket-jump twice as often for the same health.";
+            case PassiveType.Slipstream: return "Air ceiling 18.5 m/s instead of 16.2. Pure travel speed: reach the fight, the pickup or the objective first. No damage bonus.";
             default: return "";
         }
     }

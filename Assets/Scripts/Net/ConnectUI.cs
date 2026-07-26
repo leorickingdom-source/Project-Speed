@@ -130,7 +130,20 @@ public class ConnectUI : MonoBehaviour
         // The trailing 44 is the error line's reserved space. Reserved unconditionally rather
         // than grown on demand, so the panel does not resize under the cursor at the exact
         // moment the player is clicking Host again. The extra 40 is the quit row.
-        const float panelW = 560f, panelH = 336f + SettingsUI.Height + 16f + 40f + 44f;
+        // The passive grid is 4 wide and grows a row at a time, so everything under it — the
+        // description, the settings block, the quit row — is measured from where that grid
+        // ENDS rather than from a constant. Two passives were added on 2026-07-27 and the
+        // third row landed straight on top of the description line, which is the kind of
+        // layout bug that only appears the day someone adds content.
+        const float passiveTop = 226f, passiveRow = 34f;
+        int passiveRows = Mathf.CeilToInt(PassiveChoice.Options.Length / 4f);
+        float passiveBottom = passiveTop + passiveRows * passiveRow;
+        float describeY = passiveBottom + 6f;
+        float settingsY = describeY + 32f;
+        float quitY = settingsY + SettingsUI.Height + 10f;
+
+        const float panelW = 560f;
+        float panelH = quitY + 30f + 16f + 44f;
         if (panel == null)
         {
             panel = new Texture2D(1, 1);
@@ -177,24 +190,24 @@ public class ConnectUI : MonoBehaviour
         {
             bool on = PassiveChoice.Selected == opts[i];
             // 134 wide so "Featherweight" and "DoubleJump" fit — at 114 they were clipped.
-            float bx = 12 + (i % 4) * 134, by = 226 + (i / 4) * 34;
+            float bx = 12 + (i % 4) * 134, by = passiveTop + (i / 4) * passiveRow;
             if (GUI.Button(new Rect(bx, by, 130, 30), opts[i].ToString(), on ? selected : button))
                 PassiveChoice.Selected = opts[i];
         }
 
         // Description of the current pick, so the choice can be made without reading code.
-        GUI.Label(new Rect(12, 300, panelW - 24f, 24),
+        GUI.Label(new Rect(12, describeY, panelW - 24f, 24),
             PassiveChoice.Describe(PassiveChoice.Selected), label);
 
         // Settings here too, not only in the pause menu — otherwise a first-time player spends
         // their entire first match on someone else's sensitivity before they can find it.
         // Saved immediately on change, since there is no menu-close event to hook here.
-        if (SettingsUI.Draw(12, 332, panelW - 24f)) GameSettings.Save();
+        if (SettingsUI.Draw(12, settingsY, panelW - 24f)) GameSettings.Save();
 
         // A way OUT of the game from the first screen. Before this, quitting a build meant
         // Alt+F4 or joining a match purely to reach the pause menu's Quit — the playtest ask
         // was literally "have an option to exit the game".
-        if (GUI.Button(new Rect(12, 332 + SettingsUI.Height + 10f, 160, 30), "Quit to desktop", button))
+        if (GUI.Button(new Rect(12, quitY, 160, 30), "Quit to desktop", button))
             QuitGame();
 
         // Map. Host-only in effect: the server loads it as a global scene and clients receive

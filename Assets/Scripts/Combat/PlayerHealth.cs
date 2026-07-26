@@ -23,6 +23,14 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
              "50 would land you on exactly 200, where BOTH of those sit at zero margin and any " +
              "later tweak to sniper damage or headMultiplier silently flips lethality.")]
     public float vitalityBonusHp = 40f;
+    [Tooltip("HP the Bloodrush passive returns for a kill. This game has NO regen of any kind, " +
+             "so a won fight still walks you toward death by attrition and the only sustain is " +
+             "a pickup someone else is standing on. Speed-healing was rejected because it was " +
+             "passive regen wearing a condition; a kill is not — it costs an opponent, which is " +
+             "the only price this game accepts for health. 30 of 150 is a fight's worth of chip " +
+             "damage back, not a reset: it rewards finishing what you started without making a " +
+             "winning player unkillable.")]
+    public float bloodrushHeal = 30f;
     public float respawnDelay = 1.5f;
     public float spawnInvuln = 2f;         // no damage for this long after (re)spawn
 
@@ -268,6 +276,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             if (killerScore != null) killerScore.AddKill();
             var net = killer.GetComponent<PlayerNetwork>();
             if (net != null) net.NotifyKillConfirmed();
+            // Bloodrush pays out from HERE for the same reason the score does: this is the one
+            // site every lethal damage source funnels through, so the heal cannot miss a kill
+            // or pay twice for one. Self-kills are excluded by the check above — rocketing
+            // yourself into the pit should not heal you.
+            var killerHealth = killer.GetComponent<PlayerHealth>();
+            if (killerHealth != null) killerHealth.RewardKillHeal();
             var match = FindAnyObjectByType<MatchManager>();
             if (match != null) match.CheckForWinner();
         }
@@ -277,6 +291,20 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         serverAttackerKind = KillKind.Normal;
 
         ApplyDeadState();
+    }
+
+    // Called on the KILLER by the victim's Die(), which only ever runs under authority — so
+    // this is already server-side and writes the SyncVar the same way damage does. Clamped to
+    // MaxHp, which reads the effective ceiling, so Bloodrush and Vitality stack correctly
+    // rather than the heal overshooting into a value the next damage tick would snap back.
+    //
+    // No-ops without the passive, so the caller does not have to know what the killer picked.
+    public void RewardKillHeal()
+    {
+        if (!HasAuthority || !Alive) return;
+        if (passives == null || !passives.Has(PassiveType.Bloodrush)) return;
+        if (bloodrushHeal <= 0f || hp.Value >= MaxHp) return;
+        hp.Value = Mathf.Min(MaxHp, hp.Value + bloodrushHeal);
     }
 
     void Respawn()
@@ -331,6 +359,18 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     void ApplyDeadState()
     {
         localRespawnAt = Time.time + respawnDelay;
+
+        // IDEMPOTENT, because this really does run twice on the authority: Die() calls it
+        // directly AND the hp SyncVar's OnChange fires for the same write. The second pass
+        // used to re-capture deadColsPrev/hiddenPrev from state the FIRST pass had already
+        // turned off, so it remembered "these were disabled" — and ApplyAliveState then
+        // faithfully restored them to disabled. The host came back from their first death
+        // alive, mobile, and with no collider: rockets could not push them (which is how this
+        // surfaced), and nothing could shoot them either, for the rest of the match.
+        //
+        // Guarding on the captured arrays rather than on Alive: these arrays ARE the record of
+        // "the dead state is currently applied", and they are what must not be overwritten.
+        if (deadCols != null) return;
 
         // Owner-only, and disabled on remote players by PlayerNetwork — so this is a no-op on
         // everyone else's copy of this player.

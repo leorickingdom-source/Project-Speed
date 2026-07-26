@@ -36,6 +36,7 @@ public class GameMenu : MonoBehaviour
             "Deathmatch  —  one weapon, most kills wins",
             "Aim for the head (dark cap)  —  bonus damage",
             "Speed IS damage  —  up to +25% above 9 m/s, held ~1s after you slow",
+            "Rocket loadout  —  fire at your own feet to launch; costs health, not momentum",
             $"{B(GameAction.Scoreboard)}  —  hold for scoreboard",
             $"{B(GameAction.ToggleControls)}  —  this card     {B(GameAction.Pause)}  —  pause",
         };

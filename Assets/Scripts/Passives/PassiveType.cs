@@ -20,4 +20,9 @@ public enum PassiveType
     WallJump,      // kick off walls in mid-air, alternating surfaces (owned by PlayerMotor)
     Highground,    // damage scales with altitude (see HighgroundDamage)
     Camper,        // joke: huge damage while nearly still, gone the moment you move
+    // APPENDED, never inserted — see the note above about these names being written as ints.
+    Bloodrush,     // kills restore health (amount owned by PlayerHealth)
+    Hookweaver,    // longer hooks and a faster re-hook (owned by GrappleHook)
+    KineticPlating,// your own blasts hurt you less; their shove is untouched (see Explosion)
+    Slipstream,    // higher air ceiling — raises flowMax (owned by PlayerMotor)
 }

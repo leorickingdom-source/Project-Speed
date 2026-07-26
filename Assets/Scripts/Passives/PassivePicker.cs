@@ -25,6 +25,10 @@ public class PassivePicker : MonoBehaviour
         PassiveType.DoubleJump,
         PassiveType.Highground,
         PassiveType.Camper,
+        PassiveType.Bloodrush,
+        PassiveType.Hookweaver,
+        PassiveType.KineticPlating,
+        PassiveType.Slipstream,
     };
 
     GUIStyle style, active;

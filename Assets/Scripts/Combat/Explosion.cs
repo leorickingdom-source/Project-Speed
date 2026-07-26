@@ -68,9 +68,28 @@ public static class Explosion
                     if (victimHealth != null && ownerNob != null)
                         victimHealth.RecordServerAttacker(ownerNob, KillKind.Normal);
                 }
-                hp.Damage(damage * falloff * (self ? selfDamageScale : damageScale));
+                // Kinetic Plating cuts what your OWN blast does to you and leaves the shove
+                // alone (the impulse above never sees this), so the rocket stays exactly as
+                // good at moving you and gets cheaper to move with. That split is the whole
+                // pick: in a game with no regen, the launcher's mobility was rationed by
+                // attrition rather than by skill.
+                float selfScale = self ? selfDamageScale * SelfDamagePassiveScale(owner) : damageScale;
+                hp.Damage(damage * falloff * selfScale);
             }
         }
+    }
+
+    // How much of your own blast Kinetic Plating lets through. Looked up per blast rather than
+    // cached anywhere: explosions are rare, this is a static helper with no instance to hang a
+    // cache on, and a stale value here would silently mis-price every rocket jump of a life.
+    public const float KineticPlatingScale = 0.5f;
+
+    static float SelfDamagePassiveScale(GameObject owner)
+    {
+        if (owner == null) return 1f;
+        var passives = owner.GetComponent<PassiveLoadout>();
+        return passives != null && passives.Has(PassiveType.KineticPlating)
+            ? KineticPlatingScale : 1f;
     }
 
     // Exposed if ANY probe point traces clear. Note the blast centre must sit slightly
