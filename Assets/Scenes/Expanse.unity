@@ -375,8 +375,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 22
-  forwardForce: 26
+  upForce: 24.816
+  forwardForce: 29.328
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -875,8 +875,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 26
-  forwardForce: 14
+  upForce: 29.328
+  forwardForce: 15.792
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -3744,8 +3744,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 22
-  forwardForce: 26
+  upForce: 24.816
+  forwardForce: 29.328
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -7026,8 +7026,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 26
-  forwardForce: 14
+  upForce: 29.328
+  forwardForce: 15.792
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -8092,8 +8092,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 22
-  forwardForce: 26
+  upForce: 24.816
+  forwardForce: 29.328
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -9194,8 +9194,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d91e0dc605abd97428fec483317c8f22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpPad
-  upForce: 22
-  forwardForce: 26
+  upForce: 24.816
+  forwardForce: 29.328
   playerMask:
     serializedVersion: 2
     m_Bits: 4294967295

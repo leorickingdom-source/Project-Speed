@@ -65,6 +65,11 @@ public class SpeedHud : MonoBehaviour
              "Off for players.")]
     public bool showDebug = false;
 
+    [Header("Grapple")]
+    [Tooltip("Show hook range marks at the crosshair — whether the rope can reach what you are " +
+             "aiming at. Its reach is the one thing in the game you cannot judge by eye.")]
+    public bool showHookReticle = true;
+
     GUIStyle big, small, dim;
     Texture2D pixel;
 
@@ -95,6 +100,12 @@ public class SpeedHud : MonoBehaviour
     float lastHpSeen = -1f;
     float hpPopUntil;
 
+    // Distance to whatever the rope would take hold of right now, or -1 when nothing is in
+    // range. Only the SIGN is drawn (marks or no marks) — the metres are kept because the
+    // raycast produces them anyway and the debug overlay is the natural place for a number.
+    float hookAimDist = -1f;
+    readonly RaycastHit[] hookProbe = new RaycastHit[8];
+
     void Awake()
     {
         if (motor == null) motor = GetComponent<PlayerMotor>();
@@ -114,7 +125,55 @@ public class SpeedHud : MonoBehaviour
         if (KeybindsUI.Open) return; // a key pressed while rebinding is a binding, not a command
         if (Keybinds.Pressed(GameAction.ToggleDebug)) showDebug = !showDebug;
         RefreshNameplates();
+        RefreshHookAim();
         RefreshPing();
+    }
+
+    // Whether the rope can reach what you are aiming at — and, while attached, that it still
+    // has an anchor.
+    //
+    // The grapple is the one verb whose reach you cannot judge by eye: 55 metres is most of an
+    // arena, surfaces at 40 and at 70 look identical down a sight line, and the failure mode is
+    // silent — you press the button and nothing happens. This is the answer to "can I make
+    // that", asked before you commit.
+    //
+    // Resolved once per frame here rather than in OnGUI, which runs several times a frame and
+    // would pay for the same raycast three times over — the same reason nameplates live here.
+    void RefreshHookAim()
+    {
+        hookAimDist = -1f;
+        if (!showHookReticle || grapple == null || motor == null) return;
+        if (health != null && !health.Alive) return;
+
+        if (view == null || !view.isActiveAndEnabled)
+        {
+            view = motor.GetComponentInChildren<Camera>();
+            if (view == null) view = Camera.main;
+        }
+        if (view == null) return;
+
+        // On a rope the question changes from "can I reach it" to "how much rope is left",
+        // which is the same number in the same place — measured from the capsule's middle,
+        // where the constraint actually acts.
+        if (grapple.Attached)
+        {
+            hookAimDist = Vector3.Distance(motor.transform.position + Vector3.up, grapple.Anchor);
+            return;
+        }
+
+        // Nearest hit that is not ourselves — the ray starts inside our own capsule, exactly
+        // as it does in GrappleHook.TryAttach, and for the same reason it is filtered by root
+        // rather than by layer.
+        int n = Physics.RaycastNonAlloc(view.transform.position, view.transform.forward,
+            hookProbe, grapple.maxRange, grapple.grappleMask, QueryTriggerInteraction.Ignore);
+        Transform self = motor.transform.root;
+        float best = float.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            if (hookProbe[i].collider.transform.root == self) continue;
+            if (hookProbe[i].distance < best) best = hookProbe[i].distance;
+        }
+        if (best < float.MaxValue) hookAimDist = best;
     }
 
     void RefreshPing()
@@ -409,7 +468,10 @@ public class SpeedHud : MonoBehaviour
                       && weapon.CurrentWeapon != null && weapon.CurrentWeapon.scopeFov <= 45f;
         if (scoped) DrawScopeOverlay(sw, sh);
         else if (!dead)
+        {
             GUI.DrawTexture(new Rect(sw * 0.5f - 2f, sh * 0.5f - 2f, 4f, 4f), Texture2D.whiteTexture);
+            DrawHookReticle(sw, sh);   // never over a scope: that view has a job already
+        }
         else
             DrawRespawnCountdown(sw, sh);
 
@@ -437,19 +499,59 @@ public class SpeedHud : MonoBehaviour
         Box(cx - 1f, cy - 1f, 2f, 2f, line);       // centre pip
     }
 
+    // Hook range marks at the crosshair.
+    //
+    // Three states, read at a glance, no number to parse mid-swing:
+    //   * nothing drawn -> out of range, or nothing hookable down that line
+    //   * cyan marks    -> the rope would take hold there right now
+    //   * grey marks    -> in range, but the rope is still on cooldown
+    // The last one is the case that most needed saying: without it, a hook denied by the
+    // cooldown and a hook denied by distance look identical, and both look like the button
+    // is broken.
+    //
+    // Marks flank the crosshair rather than surrounding it, so they never compete with the
+    // centre dot you actually aim with.
+    void DrawHookReticle(float sw, float sh)
+    {
+        if (hookAimDist < 0f || grapple == null) return;
+
+        float cx = sw * 0.5f, cy = sh * 0.5f;
+        bool ready = grapple.CooldownLeft <= 0f;
+        Color c = grapple.Attached ? new Color(0.2f, 0.9f, 1f, 0.95f)
+                : ready            ? new Color(0.2f, 0.9f, 1f, 0.7f)
+                                   : new Color(0.62f, 0.67f, 0.72f, 0.45f);
+
+        Box(cx - 13f, cy - 4f, 2f, 8f, c);
+        Box(cx + 11f, cy - 4f, 2f, 8f, c);
+    }
+
     // Hook time as a draining bar just under the crosshair. The rope already frays as it runs
     // out, but that is peripheral and approximate — while swinging you are looking where you
     // are GOING, not at the rope. This is the precise version, in the one place already being
-    // looked at, and it exists only while a hook is live so it costs nothing the rest of the
-    // time.
+    // looked at. The same bar runs backwards as the cooldown recharges, so one strip of pixels
+    // answers both "how long have I got" and "when can I go again", and it is absent entirely
+    // whenever the rope is simply ready.
     void DrawHookTimer(float sw, float sh)
     {
-        if (grapple == null || !grapple.Attached) return;
+        if (grapple == null) return;
 
-        float t = grapple.TimeLeft01;
         const float w = 54f, h = 3f;
         float x = (sw - w) * 0.5f, y = sh * 0.5f + 26f;
 
+        // Not attached: the same bar REFILLS with the cooldown. A rope you cannot fire is the
+        // one state where pressing the button does nothing and the screen owes you a reason —
+        // without it, a hook denied by the cooldown is indistinguishable from a hook that
+        // missed. Hidden once it is full, so the bar still means "something is happening".
+        if (!grapple.Attached)
+        {
+            float cd = grapple.Cooldown01;
+            if (cd <= 0f) return;
+            Box(x - 1f, y - 1f, w + 2f, h + 2f, new Color(0f, 0f, 0f, 0.5f));
+            Box(x, y, w * (1f - cd), h, new Color(0.5f, 0.6f, 0.7f, 0.85f)); // muted: not ready
+            return;
+        }
+
+        float t = grapple.TimeLeft01;
         Box(x - 1f, y - 1f, w + 2f, h + 2f, new Color(0f, 0f, 0f, 0.5f));
         // Matches the rope: cyan while you have room, red as it expires, so the two cues are
         // obviously the same information rather than two things to learn.

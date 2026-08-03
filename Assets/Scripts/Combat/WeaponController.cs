@@ -72,8 +72,10 @@ public class Weapon
              "distance zero — and the blast centre sits outside the victim's capsule anyway, so " +
              "even a perfect hit only scored 0.87 falloff.")]
     public float directDamage = 0f;
-    public float blastForce = 16f;     // knockback to others
-    public float selfForce = 24f;      // your own rocket-jump kick
+    // Both scaled by sqrt(28/22) = 1.128 when gravity went 22 -> 28, so a rocket jump reaches
+    // the same height and a blast throws you the same distance as before the change.
+    public float blastForce = 18f;     // knockback to others
+    public float selfForce = 27f;      // your own rocket-jump kick
     [Tooltip("Fraction of your own blast you take. Quake halves it so rocket-jumping is " +
              "repeatable; at 1 a single jump costs ~70% of your health.")]
     [Range(0f, 1f)] public float selfDamageScale = 0.5f;
@@ -439,7 +441,7 @@ public class WeaponController : MonoBehaviour
         // into a one-shot. Never applies to the shooter, so rocket jumps cost the same 31.
         new Weapon { name = "Rocket", kind = FireKind.Projectile, automatic = true, cycle = 0.9f,
                      projectileSpeed = 60f, blastRadius = 5f, blastDamage = 90f, directDamage = 40f,
-                     blastForce = 16f, selfForce = 24f,
+                     blastForce = 18f, selfForce = 27f,   // 1.128x, see the fields — gravity 22 -> 28
                      // 0.35, not Quake's 0.5. Quake hands you armour shards and a health pickup
                      // on every corner; this game has NO regen of any kind, so a 45-per-jump
                      // tax turned the mobility tool into a countdown. 31 still costs a fifth of

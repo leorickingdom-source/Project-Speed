@@ -131,8 +131,8 @@ MonoBehaviour:
   maxSlides: 5
   groundSpeed: 9
   groundAccel: 18
-  friction: 8
-  stopSpeed: 2
+  friction: 11
+  stopSpeed: 4
   slopeLimit: 55
   groundProbe: 0.35
   airAccel: 2
@@ -141,13 +141,13 @@ MonoBehaviour:
   airCapSpeed: 1.2
   dashSpeed: 21
   dashCooldown: 0.9
-  dashGrace: 0.45
-  gravity: 22
-  grappleGravityScale: 0.7
-  jumpForce: 8
+  dashGrace: 0.25
+  gravity: 28
+  grappleGravityScale: 1
+  jumpForce: 9
   autoBhop: 1
   airJumpCount: 1
-  airJumpForce: 10
+  airJumpForce: 11.3
   standHeight: 2
   crouchHeight: 1
   crouchSpeed: 4
@@ -158,7 +158,7 @@ MonoBehaviour:
   slideBoost: 1.35
   slideMaxSpeed: 16
   slideCooldown: 0.4
-  slideFriction: 0.7
+  slideFriction: 1
   slideTurnRate: 4
   slideSlopeAccel: 18
   slideMinSpeed: 3
@@ -365,16 +365,15 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   maxRange: 55
-  pullAccel: 55
-  maxClosingSpeed: 28
-  pullFalloffStart: 16
-  pullFalloffEnd: 30
-  releaseBoost: 5
-  releaseBoostUpScale: 0.35
+  reelSpeed: 14
+  fastReelScale: 1.7
+  actorReelSpeed: 8
+  releaseBoost: 0
+  releaseBoostUpScale: 0.2
   releaseBoostMinSpeed: 6
   attachTime: 1.8
-  arriveDistance: 2.2
-  refireDelay: 0.12
+  arriveDistance: 3
+  cooldown: 2
   ropeWidth: 0.06
   ropeColor: {r: 0.2, g: 0.9, b: 1, a: 1}
 --- !u!114 &4976934421120441866

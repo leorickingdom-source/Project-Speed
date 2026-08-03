@@ -408,6 +408,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             deadCols[i].enabled = false;
         }
 
+        // Drop the rope. A frozen motor never steps, so nothing would run the hook's clock
+        // down, and the corpse would keep a line drawn to an anchor it can no longer reach.
+        var hook = GetComponent<GrappleHook>();
+        if (hook != null) hook.ResetForRespawn();
+
         if (motor == null) return;
         motor.velocity = Vector3.zero;
         motor.Frozen = true; // freeze the sim until respawn (runtime flag, never serialized)
@@ -442,6 +447,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // WeaponController.ResetForRespawn for the sniper trap this closes.
         var weapon = GetComponent<WeaponController>();
         if (weapon != null) weapon.ResetForRespawn();
+
+        // Fresh rope too, and READY: dying is not a swing, so it must not cost the cooldown.
+        // Repeated from ApplyDeadState rather than trusted, because a client that joins or
+        // reconciles into an alive state never ran the death path at all.
+        var hook = GetComponent<GrappleHook>();
+        if (hook != null) hook.ResetForRespawn();
 
         if (motor == null) return;
         motor.velocity = Vector3.zero;

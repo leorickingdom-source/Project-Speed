@@ -4,26 +4,34 @@ using UnityEngine;
 // the game is built around, so gating it would mean some players simply are not playing the
 // movement game (cf. Warsow's dash, Titanfall's wall-run).
 //
-// PULL model (Pathfinder / Apex). The rope ADDS acceleration toward the anchor and never
-// replaces the velocity you already had. That one property is the whole feel:
+// ROPE model. The rope is INEXTENSIBLE and it REELS: it has a length, that length only ever
+// shrinks, and the component of your velocity along it is the winch's to decide, not yours.
+// Everything perpendicular to the rope is untouched, which is where the swing comes from:
 //
-//   * aim straight at a surface  -> the pull dominates and you get reeled in
-//   * carry lateral speed        -> the same pull acts as centripetal force and you CURVE
-//                                   around the anchor, which is the grapple-swing
-//   * air-strafe still works     -> you steer the arc the whole time
+//   * aim straight at a surface  -> you are hauled in at the reel rate, steadily
+//   * carry lateral speed        -> the constraint turns it into an arc around the anchor
+//   * air-strafe still works     -> you pump and steer the arc the whole time (see
+//                                   PlayerMotor.AccelerateOnRope)
 //   * release                    -> everything you built is yours, nothing is cancelled
 //
-// Two earlier models are worth remembering, because each failed for an instructive reason.
-// The first was a winch that drove velocity onto the rope line with MoveTowards: forcing
-// velocity to POINT at the anchor leaves nothing tangential, so it could never arc. The
-// second was a rigid pendulum that constrained distance: correct physics, but our maps are
-// wide rather than tall, and a pendulum needs height to convert into speed - so the arcs were
-// short and it fought every wall it touched. Adding force instead of dictating velocity gives
-// both behaviours out of one rule and needs no rope length in the reconcile state.
+// This replaced a PULL model (add acceleration toward the anchor, taper it off with speed)
+// that playtest called "more a spring than a grapple", and it was: a force proportional to
+// nothing but distance-direction, with no length to hold you, stretches and rebounds. It also
+// had no rope LENGTH at all, so the gap to the anchor grew freely whenever you outran the
+// pull — a rope that gets longer is not a rope.
 //
-// Bounded by TIME, not by a cooldown: attachTime seconds per hook, then it lets go. Apex uses
-// a long cooldown because a grapple with no limit is a fly-anywhere button; a duration cap
-// does the same job without introducing the game's first ability timer.
+// Two older models are worth remembering. The first was a winch that drove velocity onto the
+// rope line with MoveTowards: forcing ALL of velocity to point at the anchor leaves nothing
+// tangential, so it could never arc. The second was a rigid pendulum with a fixed length:
+// correct physics, but our maps are wide rather than tall, and a pendulum needs height to
+// convert into speed, so the arcs were short. The reel is what fixes that here — the rope
+// shortening is a source of progress the pendulum did not have, so a swing across flat
+// ground still gets you somewhere.
+//
+// Bounded BOTH ways: attachTime seconds per hook, then a cooldown before the next one. The
+// duration cap alone (the old rule) stopped a single hook from being a flight, but nothing
+// stopped the NEXT hook starting a tick later — playtest chained hook-jump-hook and left the
+// map. A cooldown is the only thing that bounds hooks-per-second.
 //
 // Integrates with PlayerMotor via ApplyTo(): the motor calls this each fixed tick AFTER
 // accel/gravity and BEFORE the move, so the motor stays the single mover. This shapes
@@ -38,48 +46,59 @@ public class GrappleHook : MonoBehaviour
     public LayerMask grappleMask = ~0;
     [Tooltip("Max anchor distance.")]
     public float maxRange = 55f;
-    [Tooltip("Pull acceleration toward the anchor (m/s^2), ADDED to your velocity rather than " +
-             "replacing it. This is the entire model: with lateral speed it acts as centripetal " +
-             "force and curves you around the anchor; aimed straight at a wall it simply reels " +
-             "you in. ONE strength, no modifier key — the reel briefly had its own button, but " +
-             "the pull IS the grapple, and asking for two held inputs to use one verb was the " +
-             "chord problem again in a different hat.")]
-    public float pullAccel = 55f;
-    [Tooltip("Ceiling on how fast you may CLOSE on the anchor. Without it a long grapple " +
-             "accelerates into the wall for its whole flight and ends in a splat. Tangential " +
-             "speed is never capped by this - only the component pointing at the anchor.")]
-    public float maxClosingSpeed = 28f;
-
-    [Tooltip("Speed at which the pull starts weakening. MUST sit above everything you can " +
-             "reach without the rope — ground 9, slide 16, bhop 16.2 — or the grapple is in " +
-             "falloff during normal play and feels limp. It was briefly 8, i.e. BELOW run " +
-             "speed, and the result was exactly that: 90% pull while walking, 20% after a " +
-             "bhop. 16 means the pull is at full strength for every speed you can build " +
-             "yourself, and only tapers past it.")]
-    public float pullFalloffStart = 16f;
-    [Tooltip("Speed at which the pull has faded to nothing. THIS is what stops the grapple " +
-             "flattening the whole speed economy. " +
-             "Measured before this existed: one hook from a DEAD STOP peaked near 50 m/s, " +
-             "against a slide ceiling of 16 and a bhop ceiling of 16.2 — and arriving at 24 " +
-             "instead of standing still improved the peak by 7%. In other words the pull " +
-             "overwhelmed whatever momentum you brought, so chaining hooks and building speed " +
-             "beforehand were both worth almost nothing. That is the exact opposite of 'more " +
-             "movement -> more speed'. " +
-             "Diminishing returns rather than a hard cap, which is the same rule the dash " +
-             "already uses: the grapple can always save you when slow, and above this it stops " +
-             "adding, so how fast you LEAVE a swing is decided by how fast you entered it.")]
-    public float pullFalloffEnd = 30f;
+    [Tooltip("Target closing speed of the reel (m/s). AUTOMATIC — there is no reel button to " +
+             "hold, because the rope is the verb and asking for a second held input to make it " +
+             "do its job was the chord problem in a different hat. Sits above run speed (9) so a " +
+             "hook is always progress, and below the slide ceiling (16) so it cannot out-earn " +
+             "movement you did yourself.")]
+    public float reelSpeed = 14f;
+    [Tooltip("How hard the winch may pull to REACH reelSpeed (m/s^2). This is the fix for " +
+             "playtest's 'slingshotting too much', and the reason matters. Setting closing speed " +
+             "to the reel rate outright — as the first version did — is an energy pump on a " +
+             "swing: your radial velocity rotates into a TANGENTIAL one as you travel around the " +
+             "anchor, and then the next tick re-injects a full reel's worth of radial on top of " +
+             "it. Sideways speed compounds every tick and you leave the swing far faster than " +
+             "you entered it. Accelerating instead bounds what one tick can add, so a swing " +
+             "gains speed the way a pendulum does rather than the way a rocket does.")]
+    public float reelAccel = 60f;
+    [Tooltip("Distance over which the reel eases off to nothing as you approach the anchor. " +
+             "Without it the winch is at full strength when the rope is metres long, and a rope " +
+             "that short whips you around the anchor faster the closer you get (the swing rate " +
+             "is speed/length) — playtest: 'keep reeling at the endpoint and it swings very " +
+             "weirdly'. Measured from arriveDistance outward.")]
+    public float reelEaseDistance = 5f;
+    [Tooltip("Swing rate, in radians per second, at which the rope simply lets go. The other " +
+             "half of the endpoint fix: once you are whipping around an anchor rather than " +
+             "swinging past it, no tuning of the pull makes the next second read as anything " +
+             "but a glitch, and the honest answer is that the rope has done its job. 3 rad/s is " +
+             "roughly a half-turn a second — far above a normal swing (a 20m rope at 25 m/s is " +
+             "1.25) and unmistakable when it happens.")]
+    public float maxSwingRate = 3f;
+    [Tooltip("Reel multiplier while JUMP is held — 'pull yourself in'. One held button on a " +
+             "key you already have under your thumb, and it is the only speed control the rope " +
+             "gives you, so the choice is legible: swing wide, or haul in.")]
+    public float fastReelScale = 1.7f;
+    [Tooltip("Reel rate on a hooked PLAYER, replacing reelSpeed for actor hooks. Reeling in on " +
+             "a person is not the same act as reeling in on a wall: at the map's rate the rope " +
+             "was a free assassination — hook, get dragged in at crash speed, and the 3.5m " +
+             "one-hit knife did the rest, with the victim given neither time nor a mistake to " +
+             "punish. 8 is under run speed, so the rope alone can no longer catch someone who " +
+             "is moving; closing on them costs speed you brought yourself. Tangential speed is " +
+             "untouched either way, so the tether-and-swing around a target still works.")]
+    public float actorReelSpeed = 8f;
     [Tooltip("Speed added along your current heading when you RELEASE a hook you were moving " +
-             "on. The slingshot, made explicit: without it, letting go is a non-event and the " +
-             "only way to leave a swing is to run the clock out. With it, release timing is a " +
-             "skill you can practise.")]
-    public float releaseBoost = 5f;
+             "on. 5 -> 2 -> 0 across playtests, and 0 is where it belongs while the complaint " +
+             "is that releases fling too far: under a constraint rope the arc ITSELF is the " +
+             "slingshot, so an explicit bonus on top was paying twice for the same skill. Left " +
+             "as a knob rather than deleted — if releases end up feeling like nothing once the " +
+             "energy pump is gone, 1 to 2 is the range to try.")]
+    public float releaseBoost = 0f;
     [Tooltip("How much of the release boost is allowed to go UPWARD. At the top of an arc your " +
              "heading is straight up, so an unbiased boost put its whole magnitude into " +
              "altitude and fired you above everything in the map with nothing left to hook. " +
              "Damping only the vertical share turns a swing into DISTANCE, which is what these " +
              "wide maps actually want, while still letting you gain some height.")]
-    [Range(0f, 1f)] public float releaseBoostUpScale = 0.35f;
+    [Range(0f, 1f)] public float releaseBoostUpScale = 0.2f;
     [Tooltip("Minimum speed before a release is boosted at all, so letting go while nearly " +
              "still is not a free jump.")]
     public float releaseBoostMinSpeed = 6f;
@@ -89,15 +108,18 @@ public class GrappleHook : MonoBehaviour
              "holding the button re-hooks automatically: short frequent hooks read as a rhythm " +
              "you play, where one long one was just a ride you sat through.")]
     public float attachTime = 1.8f;
-    [Tooltip("Auto-release when this close to the anchor, so you launch past instead of splatting.")]
-    public float arriveDistance = 2.2f;
-    [Tooltip("Seconds before a HELD button may hook again after the previous hook ended. The " +
-             "grapple used to need a full release-and-press to re-fire, so once a hook expired " +
-             "in mid-air you were holding a dead button until you thought to let go — which is " +
-             "precisely when you are trying to catch the floor. Holding now re-hooks on its " +
-             "own; this delay is only here so the instant a hook ends you do not immediately " +
-             "grab the surface you were about to fly past.")]
-    public float refireDelay = 0.12f;
+    [Tooltip("Auto-release when this close to the anchor, so you launch past instead of " +
+             "splatting. 2.2 -> 3: the last metre of a reel is where the rope is shortest and " +
+             "therefore where a swing is fastest and least readable, and nothing good happens " +
+             "in it.")]
+    public float arriveDistance = 3f;
+    [Tooltip("Seconds the rope is unavailable after ANY hook ends, however it ended. The old " +
+             "0.12s refire delay only stopped the rope re-grabbing on the very next tick, " +
+             "which meant hooks-per-second was bounded by nothing: playtest chained " +
+             "hook-jump-hook and crossed maps in one breath. 2s is long enough that a hook is " +
+             "a decision about WHERE, not a button you hold down. Counts down in dt rather " +
+             "than against Time.time, so a reconciling client replays it exactly.")]
+    public float cooldown = 2f;
 
     [Header("Hookweaver passive")]
     // The movement pick, in a set where wall jump, Momentum and the grapple itself are all
@@ -107,10 +129,10 @@ public class GrappleHook : MonoBehaviour
              "one more swing per hook — enough to chain across a gap that otherwise needs the " +
              "floor in between.")]
     public float hookweaverAttachTime = 2.6f;
-    [Tooltip("refireDelay while Hookweaver is equipped. Halved, so a held button catches the " +
-             "next surface almost immediately and chaining stops depending on how cleanly you " +
-             "release.")]
-    public float hookweaverRefireDelay = 0.06f;
+    [Tooltip("cooldown while Hookweaver is equipped. 1.2 against the baseline 2 is one extra " +
+             "hook roughly every three, which is what the pick is FOR — more rope, sooner — " +
+             "without handing back the unbounded chaining the cooldown exists to stop.")]
+    public float hookweaverCooldown = 1.2f;
 
     // Resolved once in Awake and again whenever the loadout changes, never asked per tick:
     // PassiveLoadout raises Changed for exactly this, and a per-tick Has() inside the sim
@@ -119,17 +141,8 @@ public class GrappleHook : MonoBehaviour
     PassiveLoadout passives;
 
     float AttachTime => hasHookweaver ? hookweaverAttachTime : attachTime;
-    float RefireDelay => hasHookweaver ? hookweaverRefireDelay : refireDelay;
+    float Cooldown => hasHookweaver ? hookweaverCooldown : cooldown;
 
-    [Tooltip("Ceiling on how fast you may CLOSE on a hooked PLAYER, replacing maxClosingSpeed " +
-             "for actor hooks. Separate because reeling in on a person is not the same act as " +
-             "reeling in on a wall: at the map's 28 the rope was a free assassination — hook, " +
-             "get dragged in at crash speed, and the 3.5m one-hit knife did the rest, with the " +
-             "victim given neither time nor a mistake to punish. 16 is the slide ceiling, so " +
-             "the rope alone can no longer catch someone who is already moving; closing on " +
-             "them costs speed you brought yourself. Tangential speed is still uncapped, so " +
-             "the tether-and-swing around a target is untouched. 0 = use maxClosingSpeed.")]
-    public float actorMaxClosingSpeed = 16f;
     [Tooltip("How much of releaseBoost you keep when letting go of a hook that was on a " +
              "PLAYER. 0 by default: the slingshot exists so a well-timed release converts a " +
              "swing into distance, and firing that same boost INTO the person you are about to " +
@@ -141,10 +154,10 @@ public class GrappleHook : MonoBehaviour
              "arrive committed, with no rope to leave on if you miss. Costs the slingshot too " +
              "— a melee detach never pays the release boost.")]
     public bool meleeDropsHook = true;
-    [Tooltip("Seconds the rope stays unavailable after a swing. refireDelay's 0.12 is far too " +
-             "short to read as a commitment — a held button would have you airborne again " +
-             "before the knife finished its 0.75s cycle. 0.6 leaves you standing in the fight " +
-             "you started for about as long as it takes to be answered.")]
+    [Tooltip("Seconds the rope stays unavailable after a swing, on top of the normal cooldown " +
+             "that a detach already starts. Kept as its own number because a melee detach must " +
+             "commit you even if the cooldown were tuned down to nothing: you arrive with a " +
+             "knife and no rope to leave on, which is the price of hook-into-knife.")]
     public float meleeHookLockout = 0.6f;
 
     [Tooltip("May the rope take hold of a PLAYER or a bot? On, the anchor rides them: hook a " +
@@ -175,26 +188,44 @@ public class GrappleHook : MonoBehaviour
     // Carried in MotorState, which is why the field there is reused rather than removed.
     public float TimeLeft { get; private set; }
 
+    // Current rope length. SIMULATION state: the constraint is built from it, it only ever
+    // shrinks, and a client that replayed without it would be constrained to a different
+    // sphere than the server and drift every tick of a swing.
+    public float RopeLength { get; private set; }
+
+    // Seconds until the rope may be fired again. Sim state for the same reason TimeLeft is:
+    // it decides whether a replayed press attaches at all.
+    public float CooldownLeft { get; private set; }
+
     // 0..1 of the hook's life remaining. The one number the cues are built from, so the rope,
     // the HUD and the warning tone can never disagree about how long you have.
     public float TimeLeft01 => AttachTime > 0f ? Mathf.Clamp01(TimeLeft / AttachTime) : 0f;
 
+    // 0..1 of the cooldown still to wait. Drives the HUD's recharge bar.
+    public float Cooldown01 => Cooldown > 0f ? Mathf.Clamp01(CooldownLeft / Cooldown) : 0f;
+
     // Snapshot / restore for reconciliation — the motor folds these into MotorState so a
     // corrected client replays with the rope in exactly the state the server had.
-    public void GetNetState(out bool attached, out Vector3 anchor, out bool held, out float timeLeft)
+    public void GetNetState(out bool attached, out Vector3 anchor, out bool held, out float timeLeft,
+        out float ropeLength, out float cooldownLeft)
     {
         attached = Attached;
         anchor = Anchor;
         held = wasHeld;
         timeLeft = TimeLeft;
+        ropeLength = RopeLength;
+        cooldownLeft = CooldownLeft;
     }
 
-    public void SetNetState(bool attached, Vector3 anchor, bool held, float timeLeft)
+    public void SetNetState(bool attached, Vector3 anchor, bool held, float timeLeft,
+        float ropeLength, float cooldownLeft)
     {
         Attached = attached;
         Anchor = anchor;
         wasHeld = held;
         TimeLeft = timeLeft;
+        RopeLength = ropeLength;
+        CooldownLeft = cooldownLeft;
         // A reconcile that says "not attached" also ends any target ride. Leaving the target
         // set would let the next tick re-derive an anchor for a hook the server says is over.
         if (!attached) { anchorTarget = null; anchorHealth = null; }
@@ -202,8 +233,7 @@ public class GrappleHook : MonoBehaviour
 
     LineRenderer line;
     bool wasHeld;
-    float refireAt;   // earliest time a held button may hook again
-    const float center = 1f;          // pull reference = feet + up*center (capsule middle)
+    const float center = 1f;          // rope reference = feet + up*center (capsule middle)
 
     // Set when the hook took hold of a living target instead of the map. The anchor is then
     // recomputed every tick from their position, so the rope rides them.
@@ -295,21 +325,28 @@ public class GrappleHook : MonoBehaviour
     // then reconcile a "not attached" state back — the grapple tearing off at random.
     // `blocked` is the motor telling us the previous move was stopped by geometry.
     public void ApplyTo(ref Vector3 velocity, Vector3 aimOrigin, Vector3 aimDir, float dt,
-        bool grappleHeld, bool blocked, bool meleePressed)
+        bool grappleHeld, bool blocked, bool meleePressed, bool reelHeld)
     {
         bool held = grappleHeld;
 
         if (hookLockLeft > 0f) hookLockLeft -= dt;
+        if (CooldownLeft > 0f) CooldownLeft = Mathf.Max(0f, CooldownLeft - dt);
 
         // A swing COMMITS. Detached without the release boost on purpose: the slingshot is the
         // reward for timing a release, not something a knife hands you on the way in.
         if (meleeDropsHook && meleePressed)
         {
             hookLockLeft = meleeHookLockout;
-            if (Attached) Detach(dt);
+            if (Attached) Detach();
         }
 
-        if (!held && wasHeld)
+        // RELEASING A LIVE HOOK — and only a live one. The Attached guard is the whole point:
+        // Detach() starts the cooldown, so letting go of a button that is not holding anything
+        // charged you a full 2s for nothing. Two ways that bit, both reported as "the cooldown
+        // resets": a hook that expired on its own started a cooldown, and then releasing the
+        // button a second later started a SECOND one; and a press that simply missed — aimed
+        // past the map, out of range — locked the rope as though it had swung.
+        if (!held && wasHeld && Attached)
         {
             // Deliberate release is rewarded, and timing it is the skill. The vertical share
             // is damped (see releaseBoostUpScale) so a well-timed release reads as a slingshot
@@ -317,21 +354,21 @@ public class GrappleHook : MonoBehaviour
             // Scaled to nothing off an actor hook by default — see actorReleaseBoostScale.
             // Read before Detach, which is what clears anchorTarget.
             float boostScale = anchorTarget != null ? actorReleaseBoostScale : 1f;
-            if (Attached && boostScale > 0f && velocity.magnitude >= releaseBoostMinSpeed)
+            if (boostScale > 0f && velocity.magnitude >= releaseBoostMinSpeed)
             {
                 Vector3 boost = velocity.normalized * (releaseBoost * boostScale);
                 boost.y *= releaseBoostUpScale;
                 velocity += boost;
             }
-            Detach(dt);
+            Detach();
         }
         else if (held)
         {
             // Hold to keep hooking. A press attaches immediately; continuing to hold re-hooks
-            // as soon as the refire delay has passed, which is what makes chaining possible —
-            // fly, and the rope takes the next surface that comes into range without you
-            // having to re-tap in mid-air.
-            if (!Attached && hookLockLeft <= 0f && (!wasHeld || Time.time >= refireAt))
+            // the moment the cooldown clears, so catching the next surface never depends on
+            // re-tapping at exactly the right instant in mid-air — the timing that matters is
+            // the cooldown, and that one is visible on the HUD.
+            if (!Attached && hookLockLeft <= 0f && CooldownLeft <= 0f)
                 TryAttach(aimOrigin, aimDir);
         }
         wasHeld = held;
@@ -341,68 +378,109 @@ public class GrappleHook : MonoBehaviour
         // The hook has a lifetime. Running out releases exactly like letting go does: whatever
         // you built is kept, nothing is cancelled.
         TimeLeft -= dt;
-        if (TimeLeft <= 0f) { Detach(dt); return; }
+        if (TimeLeft <= 0f) { Detach(); return; }
 
         // A hook on a living target RIDES them: the anchor is re-derived from where they are
         // now, not from where they were when the rope landed. That one line is the whole
         // difference between hooking a person and hooking the air they just vacated — a
-        // runner now drags you along their own escape, and the pull's existing falloff means
-        // they still gain on you if they were faster to begin with.
+        // runner now drags you along their own escape, and their slower reel rate means they
+        // still gain on you if they were faster to begin with.
         if (anchorTarget != null)
         {
             // Dead or despawned mid-swing. Dropping the rope is the honest outcome: holding
             // the last known point leaves you flying at a corpse, and holding a destroyed
             // transform is an NRE one tick later.
             if (!anchorTarget.gameObject.activeInHierarchy
-                || (anchorHealth != null && !anchorHealth.Alive)) { Detach(dt); return; }
+                || (anchorHealth != null && !anchorHealth.Alive)) { Detach(); return; }
             Anchor = anchorTarget.position + anchorOffset;
         }
 
         Vector3 toAnchor = Anchor - PullPoint;
         float dist = toAnchor.magnitude;
-        if (dist <= arriveDistance) { Detach(dt); return; }       // arrived -> launch past
+        if (dist <= arriveDistance) { Detach(); return; }         // arrived -> launch past
         Vector3 dir = toAnchor / dist;   // points TOWARD the anchor
 
-        // Nothing at all while the motor is jammed against geometry. A pull that keeps adding
-        // velocity into a surface banks force for the instant you slide free, which is the
-        // bounce the rigid version had; there is no reason to repeat it here.
+        // Nothing at all while the motor is jammed against geometry — and the rope does not
+        // shorten either. A constraint that keeps winching on a player pinned against a wall
+        // stores up a correction that fires the instant they slide free.
         if (blocked) return;
 
-        // Diminishing returns with speed. Full pull while slow, nothing once you are already
-        // fast — so the rope is a way to GET moving and to steer, never a way to out-earn the
-        // movement you did yourself. Uses total speed rather than the closing component on
-        // purpose: it was uncapped tangential speed that ran away.
-        float speed = velocity.magnitude;
-        float falloff = 1f - Mathf.Clamp01(
-            (speed - pullFalloffStart) / Mathf.Max(0.01f, pullFalloffEnd - pullFalloffStart));
+        // The rope only ever gets SHORTER, and it tracks where you actually are: any slack you
+        // swing into is kept, never given back. Note it is NOT driven down by the reel rate —
+        // the reel acts on velocity, and letting the length run ahead of the player would make
+        // ConstrainPosition drag them along by the transform, which reads as a stutter rather
+        // than a pull.
+        RopeLength = Mathf.Min(RopeLength, dist);
 
-        // ADD, never assign. Your existing velocity is untouched, so the tangential part of it
-        // survives and this becomes centripetal force: the curve is emergent, not scripted.
-        Vector3 pull = dir * (pullAccel * falloff) * dt;
+        // TENSION. An inextensible rope cannot let you move away from the anchor, so the
+        // outward part of your velocity is removed. This only ever takes energy out, which is
+        // what a rope does — the swing is what remains once the outward half is gone.
+        float radial = Vector3.Dot(velocity, dir);   // + = closing on the anchor
+        if (radial < 0f) { velocity -= dir * radial; radial = 0f; }
 
-        // Cap only the CLOSING component. Left alone, a long grapple accelerates at the anchor
-        // for its whole flight and arrives at a speed that reads as a crash; meanwhile capping
-        // total speed would defeat the point, because the speed you are here for is sideways.
-        // A person gets a tighter ceiling than a wall does (actorMaxClosingSpeed): the wall is
-        // not trying to survive you.
-        float closeCap = anchorTarget != null && actorMaxClosingSpeed > 0f
-                       ? actorMaxClosingSpeed : maxClosingSpeed;
-        float closing = Vector3.Dot(velocity, dir);
-        if (closing >= closeCap) pull -= dir * Vector3.Dot(pull, dir);
-        else if (closing + Vector3.Dot(pull, dir) > closeCap)
-            pull = dir * (closeCap - closing);
+        // Whipping rather than swinging: let go. Past a few rad/s the arc is faster than the
+        // camera can narrate and every frame of it looks like a bug.
+        Vector3 tangential = velocity - dir * radial;
+        if (tangential.magnitude > maxSwingRate * dist) { Detach(); return; }
 
-        velocity += pull;
+        // REEL. An acceleration toward the reel speed, never an assignment to it — see
+        // reelAccel for why the difference is the whole slingshot problem — and eased to
+        // nothing over the last few metres, where a short rope turns any leftover speed into
+        // a whip (see reelEaseDistance). Nothing happens if you are already closing faster
+        // than the winch: a hook fired while you fly at the anchor must not brake you.
+        float reel = (anchorTarget != null ? actorReelSpeed : reelSpeed)
+                     * (reelHeld ? fastReelScale : 1f)
+                     * Mathf.Clamp01((dist - arriveDistance) / Mathf.Max(0.01f, reelEaseDistance));
+        if (radial < reel) velocity += dir * Mathf.Min(reelAccel * dt, reel - radial);
     }
 
-    // Single exit point, so every way a hook can end also arms the refire delay. Missing one
-    // would let a held button re-grab the same surface on the very next tick.
-    void Detach(float dt)
+    // Hold the player on (or inside) the rope sphere after the motor has moved them. The
+    // velocity constraint above keeps the distance right in open air, but a swing is a chord
+    // across an arc and collisions can stop the move outright, so without this the rope creeps
+    // longer over a long swing — the exact failure the length is here to prevent.
+    // Returns whether it actually moved the position, so the motor knows to depenetrate again.
+    public bool ConstrainPosition(ref Vector3 pos)
+    {
+        if (!Attached) return false;
+        Vector3 to = Anchor - (pos + Vector3.up * center);
+        float d = to.magnitude;
+        if (d <= RopeLength || d < 0.001f) return false;
+        pos += to / d * (d - RopeLength);
+        return true;
+    }
+
+    // Everything a life must not inherit from the last one. Called by PlayerHealth both when
+    // you die and when you respawn.
+    //
+    // On DEATH, because a hook survives dying otherwise: the motor is frozen, so nothing ticks
+    // the rope down, and the corpse goes on rendering a line to an anchor across the map.
+    // On RESPAWN, because the stale rope is worse than cosmetic — the length is still the one
+    // you had when you died, the anchor is wherever you died, and the first tick of the new
+    // life sees a 10m rope with a 60m gap and drags you back across the map to close it.
+    //
+    // NOT routed through Detach(), deliberately: that starts the cooldown, and a new life is
+    // not a swing you just took. You spawn with the rope ready.
+    public void ResetForRespawn()
+    {
+        Attached = false;
+        anchorTarget = null;
+        anchorHealth = null;
+        RopeLength = 0f;
+        TimeLeft = 0f;
+        CooldownLeft = 0f;
+        hookLockLeft = 0f;
+        wasHeld = false;
+        if (line != null) line.enabled = false;
+    }
+
+    // Single exit point, so every way a hook can end also starts the cooldown. Missing one
+    // would leave a hole a held button could chain through.
+    void Detach()
     {
         Attached = false;
         anchorTarget = null;      // or the next hook keeps riding the last person you held
         anchorHealth = null;
-        refireAt = Time.time + RefireDelay;
+        CooldownLeft = Cooldown;
     }
 
     void TryAttach(Vector3 origin, Vector3 dir)
@@ -445,6 +523,10 @@ public class GrappleHook : MonoBehaviour
         anchorOffset = bestActor != null ? hits[best].point - bestActor.position : Vector3.zero;
         anchorHealth = bestActor != null ? bestActor.GetComponentInParent<PlayerHealth>() : null;
         TimeLeft = AttachTime;
+        // Measured from the PULL POINT, not from the aim ray's origin: the ray starts at the
+        // eye and the constraint acts on the capsule's middle, and seeding the length with the
+        // eye's distance would put the player a head-height outside their own rope on tick one.
+        RopeLength = (Anchor - PullPoint).magnitude;
     }
 
     void LateUpdate()

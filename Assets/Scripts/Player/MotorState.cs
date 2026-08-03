@@ -32,6 +32,11 @@ public struct MotorState
     public int wallJumpsUsed;     // WallJump budget spent this airtime
     public Vector3 lastWallNormal; // surface of the last wall kick, so the same wall cannot be re-used
 
+    // Jump pads are detected INSIDE the sim (PlayerMotor.CheckJumpPad) rather than by the pad
+    // pushing on the player from its own FixedUpdate, so the launch is predicted and replayed
+    // like every other verb — which means its refire window is sim state too.
+    public float padCooldownLeft;
+
     // Grapple lives on GrappleHook but shapes velocity every tick through ApplyTo, so it has
     // to reconcile with the rest or a corrected client would replay with the rope in the
     // wrong state — reeling when the server says it let go, or vice versa.
@@ -39,4 +44,8 @@ public struct MotorState
     public Vector3 grappleAnchor;
     public bool grappleHeld;      // edge-detect state; without it a replay can re-fire a press
     public float grappleTimeLeft; // seconds of hook remaining; counts down every attached tick
+    // Rope length. The constraint is built from it, so a client replaying without it would be
+    // held to a different sphere than the server and drift through every tick of a swing.
+    public float grappleRopeLength;
+    public float grappleCooldownLeft; // seconds until the rope may fire again
 }

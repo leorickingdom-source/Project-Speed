@@ -255,8 +255,8 @@ by ordinary flow, and every metre per second past it is worth nothing:
 | slide | 16 | 0.25 (max) |
 | bhop | 16.2 | 0.25 |
 | Slipstream ceiling | 18.5 | 0.25 |
-| grapple closing cap | 28 | 0.25 |
-| rocket-jump launch | ~24 vertical | 0.25 |
+| grapple reel (jump held) | 23.8 | 0.25 |
+| rocket-jump launch | ~27 vertical | 0.25 |
 
 So the game's three signature verbs — grapple, rocket jump, slingshot release — are **damage
 neutral**. "More movement -> more speed -> more power" holds only up to the speed a slide already

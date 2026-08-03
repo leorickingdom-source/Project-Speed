@@ -31,8 +31,16 @@ public class PlayerMotor : MonoBehaviour
     [Header("Ground move")]
     public float groundSpeed = 9f;
     public float groundAccel = 18f;
-    public float friction = 8f;
-    public float stopSpeed = 2f;
+    [Tooltip("Ground friction rate. 8 -> 11 after playtest called the ground 'very slidy': at 8 " +
+             "the speed you carry off a rope or a pad survives most of a corridor, so landing " +
+             "never felt like arriving. The air is still frictionless, so bunnyhopping keeps " +
+             "everything — this only taxes the player who stopped hopping.")]
+    public float friction = 11f;
+    [Tooltip("Friction is computed against AT LEAST this speed, so slow movement decays at a " +
+             "flat rate instead of an exponential one that never quite reaches zero. 2 -> 4: " +
+             "the last few m/s were the slidy part, because that is exactly where friction " +
+             "proportional to speed has almost nothing left to bite on.")]
+    public float stopSpeed = 4f;
     public float slopeLimit = 55f;
     [Tooltip("How far below the feet we still count as standing on ground (also snap distance).")]
     public float groundProbe = 0.35f;
@@ -48,6 +56,15 @@ public class PlayerMotor : MonoBehaviour
     public float grappleAirAccel = 7f;
     public bool useAirCap = false;
     public float airCapSpeed = 1.2f;
+    [Tooltip("Air STEERING, in radians per second, for speeds above the air cap. Quake's " +
+             "PM_Accelerate can add nothing once you are already at the cap along your wish " +
+             "direction, so a fast player has literally zero authority — playtest: 'too fast, " +
+             "cant drift'. This rotates horizontal velocity toward your input WITHOUT changing " +
+             "its magnitude, so it buys control and never speed: strafe-jumping is untouched, " +
+             "and nobody can turn it into an engine. The rate is scaled by cap/speed, so 16 m/s " +
+             "steers freely and 40 m/s is a wide committed arc — going faster still costs you " +
+             "the ability to change your mind, which is the trade the speed is worth having.")]
+    public float airSteerRate = 2f;
 
     [Header("Dash passive")]
     [Tooltip("Speed the dash brings you UP TO — a floor, not an additive kick. From a walk " +
@@ -65,8 +82,11 @@ public class PlayerMotor : MonoBehaviour
     public float dashCooldown = 0.9f;
     [Tooltip("Seconds of friction immunity after a dash. Without it, ground friction bleeds an " +
              "18 m/s dash back to groundSpeed in ~87ms (ln(2)/friction) and a ground dash is " +
-             "imperceptible — only air dashes survive, because air has no friction.")]
-    public float dashGrace = 0.45f;
+             "imperceptible — only air dashes survive, because air has no friction. " +
+             "0.45 -> 0.25 with the friction rise: half a second of NO ground friction was " +
+             "itself a large part of what playtest read as sliding, and 0.25 is still four " +
+             "times what it takes for the dash to be felt.")]
+    public float dashGrace = 0.25f;
     [Tooltip("Guaranteed speed GAINED by a dash even when already above dashSpeed. The pure " +
              "floor meant a dash at speed changed nothing — physically true to the no-" +
              "snowball rule, but it made the button feel broken (playtest: 'no difference on " +
@@ -76,25 +96,32 @@ public class PlayerMotor : MonoBehaviour
     public float dashGain = 5f;
 
     [Header("Jump / gravity")]
-    public float gravity = 22f;
-    [Tooltip("Gravity multiplier while a grapple is attached. Below 1 because the rope has to " +
-             "beat gravity to be worth firing upward: at full weight a 55 m/s^2 pull nets only " +
-             "33 upward, so climbing a rope felt like wading. Not zero — the arc of a swing IS " +
-             "gravity, and removing it would leave you flying in a straight line.")]
-    [Range(0.1f, 1f)] public float grappleGravityScale = 0.7f;
-    public float jumpForce = 8f;
+    [Tooltip("22 -> 28 after playtest called flight 'floaty'. Hang time is what floaty MEANS: " +
+             "at 22 a jump spends 0.72s in the air and a 20 m/s pad launch 1.8s, most of it " +
+             "with nothing to do. jumpForce/airJumpForce/wallJumpUp were all raised alongside " +
+             "it so every height in the game is unchanged (h = v^2/2g) — this makes the same " +
+             "arcs happen FASTER, it does not lower the ceiling.")]
+    public float gravity = 28f;
+    [Tooltip("Gravity multiplier while a grapple is attached. 1 = no exception. It was 0.7 " +
+             "when the rope was a force that had to out-pull gravity to climb; the rope is now " +
+             "a constraint that simply forbids moving away from the anchor, so it does not need " +
+             "the help — and playtest's 'weird sometimes' was partly this: gravity silently " +
+             "changing strength depending on whether a rope happened to be attached.")]
+    [Range(0.1f, 1f)] public float grappleGravityScale = 1f;
+    public float jumpForce = 9f;
     public bool autoBhop = true;
     [Tooltip("Air jumps allowed by the DoubleJump passive, refunded on landing.")]
     public int airJumpCount = 1;
     [Tooltip("Upward speed of an air jump. Set flat rather than added to current velocity so " +
              "it rescues a fall predictably instead of doing nothing when you're dropping fast. " +
-             "10 after two playtest rounds (7.5 -> 8.5 -> 10) — visibly ABOVE the ground " +
-             "jump's 8, so the second jump reads as the feature it costs a passive slot to have.")]
-    public float airJumpForce = 10f;
+             "10 after two playtest rounds (7.5 -> 8.5 -> 10), then 11.3 to hold that same " +
+             "height at the raised gravity — visibly ABOVE the ground jump, so the second jump " +
+             "reads as the feature it costs a passive slot to have.")]
+    public float airJumpForce = 11.3f;
     [Header("Wall jump (baseline, everyone has it)")]
     [Tooltip("Upward speed of a wall kick. Slightly under the ground jump: a wall is a route, " +
-             "not a better staircase.")]
-    public float wallJumpUp = 7.5f;
+             "not a better staircase. 7.5 -> 8.5 keeps the old height at the raised gravity.")]
+    public float wallJumpUp = 8.5f;
     [Tooltip("Speed floor pushed away from the wall. High enough that the kick CLEARS the " +
              "surface — a wall jump that leaves you scraping the same wall is a stall.")]
     public float wallJumpPush = 11f;
@@ -130,10 +157,16 @@ public class PlayerMotor : MonoBehaviour
     [Tooltip("Seconds before the entry kick can fire again. Without it, tapping crouch re-enters " +
              "the slide every few ticks and slideBoost compounds into unbounded speed.")]
     public float slideCooldown = 0.4f;
-    public float slideFriction = 0.7f;     // low friction while sliding (vs friction)
+    public float slideFriction = 1f;       // low friction while sliding (vs friction)
     public float slideTurnRate = 4f;       // slide steer speed (rad/s), rotates velocity, never adds speed
     public float slideSlopeAccel = 18f;    // downhill acceleration while sliding
     public float slideMinSpeed = 3f;       // slide ends below this speed (hysteresis vs enter)
+
+    [Header("Jump pads")]
+    [Tooltip("Seconds before a pad may launch THIS player again. Per-player and part of the " +
+             "sim state, unlike the pad-side timer it replaces, which was shared by everyone " +
+             "who stepped on it.")]
+    public float padCooldown = 0.25f;
 
     [Header("Flow (accessible momentum)")]
     [Tooltip("Keep moving and your AIR top speed climbs toward groundSpeed*flowMax; stop and it " +
@@ -225,6 +258,7 @@ public class PlayerMotor : MonoBehaviour
     float airTime;              // seconds continuously airborne — reconciled, see MotorState
     int wallJumpsUsed;          // reconciled — see MotorState
     Vector3 lastWallNormal;     // ditto: which wall the last kick came off
+    float padCooldownLeft;      // ditto — jump pads are detected inside the sim now
     bool hasDash;               // resolved once in Awake
     bool hasDoubleJump;
     bool hasSlipstream;         // ditto — raises the flow ceiling, see UpdateFlow
@@ -292,10 +326,11 @@ public class PlayerMotor : MonoBehaviour
             airTime = airTime,
             wallJumpsUsed = wallJumpsUsed,
             lastWallNormal = lastWallNormal,
+            padCooldownLeft = padCooldownLeft,
         };
         if (grapple != null)
             grapple.GetNetState(out s.grappleAttached, out s.grappleAnchor, out s.grappleHeld,
-                out s.grappleTimeLeft);
+                out s.grappleTimeLeft, out s.grappleRopeLength, out s.grappleCooldownLeft);
         return s;
     }
 
@@ -316,8 +351,10 @@ public class PlayerMotor : MonoBehaviour
         airTime = s.airTime;
         wallJumpsUsed = s.wallJumpsUsed;
         lastWallNormal = s.lastWallNormal;
+        padCooldownLeft = s.padCooldownLeft;
         if (grapple != null)
-            grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld, s.grappleTimeLeft);
+            grapple.SetNetState(s.grappleAttached, s.grappleAnchor, s.grappleHeld, s.grappleTimeLeft,
+                s.grappleRopeLength, s.grappleCooldownLeft);
         UpdateCapsule(); // collider must match the restored height before the next cast
     }
 
@@ -389,7 +426,7 @@ public class PlayerMotor : MonoBehaviour
             TryWallJump(cmd, wish);
             float ws = useAirCap ? Mathf.Min(AirWishSpeed, airCapSpeed) : AirWishSpeed;
             if (Grappling) AccelerateOnRope(wish, ws, grappleAirAccel, dt);
-            else Accelerate(wish, ws, airAccel, dt);
+            else { Accelerate(wish, ws, airAccel, dt); AirSteer(wish, ws, dt); }
             velocity.y -= gravity * (Grappling ? grappleGravityScale : 1f) * dt;
         }
 
@@ -405,14 +442,71 @@ public class PlayerMotor : MonoBehaviour
         {
             Vector3 eye = transform.position + Vector3.up * (standEyeHeight - (standHeight - height));
             Vector3 aimDir = Quaternion.Euler(cmd.pitch, cmd.yaw, 0f) * Vector3.forward;
-            grapple.ApplyTo(ref velocity, eye, aimDir, dt, cmd.grapple, Blocked, cmd.meleePressed);
+            // jumpHeld doubles as "reel me in" while a rope is attached. It is the same button
+            // that jumps on the ground and spends an air jump in the air, and it never has to
+            // choose: those two need a PRESS, this one a HOLD.
+            grapple.ApplyTo(ref velocity, eye, aimDir, dt, cmd.grapple, Blocked, cmd.meleePressed,
+                cmd.jumpHeld);
         }
+
+        // Last, so a launch survives everything else this tick and is the velocity we move on.
+        CheckJumpPad(dt);
 
         Blocked = false;
         Vector3 pos = CollideAndSlide(transform.position, velocity * dt);
         Depenetrate(ref pos);
         Depenetrate(ref pos);
+        // The rope is inextensible, so it gets the last word on WHERE the move ended — then
+        // one more depenetration, because pulling onto the rope sphere can push into geometry.
+        if (grapple != null && grapple.ConstrainPosition(ref pos)) Depenetrate(ref pos);
         transform.position = pos;
+    }
+
+    // Jump pads, detected from INSIDE the sim.
+    //
+    // They used to push on the player from their own FixedUpdate, which broke three ways at
+    // once. It was invisible to prediction — the server launched you on its tick, the client
+    // did not, and reconciliation snapped the launch away, so a pad fired or did not at random
+    // online. It polled a single overlap per tick, so at 25 m/s (0.5m of travel per tick) a
+    // thin pad was simply not there to be touched. And it built its overlap box from
+    // `bounds.extents`, which is already world-axis-aligned, while ALSO passing the pad's
+    // rotation — so every rotated pad in Arena tested the wrong volume.
+    //
+    // A swept capsule against the same static geometry the motor already trusts fixes all
+    // three: deterministic (same cast on both machines), continuous (it is a sweep, not a
+    // point sample), and rotation-correct (there is no box).
+    void CheckJumpPad(float dt)
+    {
+        padCooldownLeft = Mathf.Max(0f, padCooldownLeft - dt);
+        if (padCooldownLeft > 0f) return;
+
+        // Raised the same way GroundCheck raises its probe: a cast that starts already
+        // overlapping the pad reports nothing at all, which is exactly the case of standing
+        // on one.
+        Vector3 origin = transform.position + Vector3.up * 0.1f;
+        JumpPad pad = PadCast(origin, Vector3.down, 0.1f + groundProbe);
+
+        // And along this tick's motion, which is what catches the pad you would otherwise
+        // cross in a single step.
+        if (pad == null)
+        {
+            Vector3 motion = velocity * dt;
+            float d = motion.magnitude;
+            if (d > 0.01f) pad = PadCast(origin, motion / d, d + skin);
+        }
+
+        if (pad == null) return;
+        PadBoost(pad.upForce, pad.Launch);
+        padCooldownLeft = padCooldown;
+    }
+
+    JumpPad PadCast(Vector3 origin, Vector3 dir, float dist)
+    {
+        GetCapsule(origin, out Vector3 p1, out Vector3 p2);
+        if (!Physics.CapsuleCast(p1, p2, Radius, dir, out RaycastHit hit, dist, groundMask,
+                QueryTriggerInteraction.Ignore)) return null;
+        if (hit.collider == col) return null;
+        return hit.collider.GetComponentInParent<JumpPad>();
     }
 
     // Accessible momentum: keep moving and top speed climbs; slow on ground and it bleeds.
@@ -625,7 +719,9 @@ public class PlayerMotor : MonoBehaviour
         if (impulse.y > 0.1f) grounded = false;
     }
 
-    // Jump pad: guarantees at least `up` vertical launch, adds horizontal carry.
+    // Jump pad: guarantees at least `up` vertical launch, adds horizontal carry. Called from
+    // CheckJumpPad inside Step, so it is predicted and replayed like every other verb — the
+    // pad no longer reaches in from outside the sim (see JumpPad).
     public void PadBoost(float up, Vector3 horizontal)
     {
         velocity.x += horizontal.x;
@@ -655,20 +751,44 @@ public class PlayerMotor : MonoBehaviour
         velocity.z += wishDir.z * accelSpeed;
     }
 
+    // Steering authority ABOVE the air cap, where Accelerate has none to give.
+    //
+    // PM_Accelerate adds nothing once your speed along the wish direction already exceeds the
+    // wish speed (add <= 0), which is correct for building speed and terrible to fly with: at
+    // 30 m/s off a pad or a rope release, the whole keyboard did nothing and the only way to
+    // change direction was to wait — playtest, exactly: "too fast cant drift".
+    //
+    // So: rotate horizontal velocity toward the input, magnitude untouched. This is SlideSteer
+    // in the air, and it has the same guarantee — it cannot add a single m/s, so it cannot be
+    // farmed and strafe-jumping (which is Accelerate's off-axis behaviour, below the cap and
+    // untouched here) is exactly as it was.
+    //
+    // Rate falls off as wishSpeed/speed: at the cap you turn freely, at double it you turn at
+    // half rate. Going faster costs manoeuvrability, which is the trade that makes committing
+    // to a line feel like a decision.
+    void AirSteer(Vector3 wish, float wishSpeed, float dt)
+    {
+        if (airSteerRate <= 0f || wish.sqrMagnitude < 1e-4f) return;
+        Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
+        float sp = flat.magnitude;
+        if (sp <= wishSpeed || sp < 0.01f) return;   // below the cap, Accelerate already steers
+        Vector3 w = new Vector3(wish.x, 0f, wish.z);
+        if (w.sqrMagnitude < 1e-4f) return;
+        w.Normalize();
+        Vector3 nd = Vector3.RotateTowards(flat / sp, w, airSteerRate * (wishSpeed / sp) * dt, 0f);
+        velocity.x = nd.x * sp;
+        velocity.z = nd.z * sp;
+    }
+
     // Air control while a rope is attached, in the rope's frame instead of the world's.
     //
     // The bug this fixes: holding W on a rope made you SLOWER, which is the opposite of what
     // every player expects and the opposite of what letting go of the keyboard did. Plain
     // Accelerate pushes along your horizontal facing, so aiming at an anchor above you and
-    // holding W poured speed straight down the rope — and every part of the grapple treats
-    // closing speed as the thing to spend, not the thing to build:
-    //
-    //   * maxClosingSpeed saw the closing speed you added and cancelled the pull's radial part
-    //   * the pull's falloff reads TOTAL speed, so the W speed weakened the rope as well
-    //   * arriveDistance came up sooner, so the hook let go early — mid-slingshot
-    //
-    // Three separate systems all reading the same input as "I want to arrive", when what the
-    // player meant was "I want to go faster".
+    // holding W poured speed straight down the rope, where the grapple reads it as "I want to
+    // arrive" — it spent the input on closing distance and then let go early. Under the rope
+    // constraint the radial part is not even yours to add: it is overwritten by the reel rate
+    // every tick, so pressing toward the anchor is now merely wasted rather than harmful.
     //
     // So: strip the radial component out of the wish direction. What is left is tangential —
     // the direction a pendulum is pumped in — which is exactly the speed a slingshot converts

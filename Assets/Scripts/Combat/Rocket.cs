@@ -9,8 +9,8 @@ public class Rocket : MonoBehaviour
     public float castRadius = 0.15f;
     public float life = 6f;
     public float blastRadius = 5f;
-    public float blastForce = 16f;
-    public float selfForce = 22f;   // your own rocket-jump kick
+    public float blastForce = 18f;
+    public float selfForce = 24.8f; // your own rocket-jump kick
     public float selfDamageScale = 0.5f; // fraction of the blast you take (Quake halves it)
     public float damageScale = 1f;  // momentum passive multiplier, sampled at launch
     public float damage = 80f;
