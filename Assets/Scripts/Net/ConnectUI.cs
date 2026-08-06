@@ -32,7 +32,7 @@ public class ConnectUI : MonoBehaviour
     string address = "localhost";
     ushort port = 7770;
 
-    GUIStyle label, field, button, selected, error, hint;
+    GUIStyle label, field, button, selected, error, hint, mapBtn, mapSelected, title, wrapDesc;
     Texture2D panel;
     // Through NetPresence: this is read from OnGUI, and InstanceFinder logs a stack trace
     // every time it is asked for a manager that is not there yet — which, on the connect
@@ -110,8 +110,19 @@ public class ConnectUI : MonoBehaviour
             selected.normal.textColor = new Color(1f, 0.9f, 0.4f);
             error = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
             error.normal.textColor = new Color(1f, 0.45f, 0.4f);
-            hint = new GUIStyle(GUI.skin.label) { fontSize = 12 };
+            hint = new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = true };
             hint.normal.textColor = new Color(1f, 1f, 1f, 0.45f);
+            wrapDesc = new GUIStyle(hint) { fontSize = 13 };
+            wrapDesc.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
+            // Map buttons run four to a 298px row — at the shared 16 the longest name
+            // ("Expanse") clipped the moment Vault made it four. 13 fits all of them.
+            mapBtn = new GUIStyle(button) { fontSize = 13 };
+            mapSelected = new GUIStyle(selected) { fontSize = 13 };
+            title = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter
+            };
+            title.normal.textColor = new Color(0.85f, 0.93f, 1f);
         }
 
         // Once running, offer only a way out — the address is locked in by then. The rebinder
@@ -135,14 +146,19 @@ public class ConnectUI : MonoBehaviour
         // ENDS rather than from a constant. Two passives were added on 2026-07-27 and the
         // third row landed straight on top of the description line, which is the kind of
         // layout bug that only appears the day someone adds content.
-        const float passiveTop = 226f, passiveRow = 34f;
+        // 268: the weapon description grew to two wrapped lines and the map description row
+        // is new beneath it — everything below the grid still derives from where it ends.
+        const float passiveTop = 268f, passiveRow = 34f;
         int passiveRows = Mathf.CeilToInt(PassiveChoice.Options.Length / 4f);
         float passiveBottom = passiveTop + passiveRows * passiveRow;
         float describeY = passiveBottom + 6f;
         float settingsY = describeY + 32f;
         float quitY = settingsY + SettingsUI.Height + 10f;
 
-        const float panelW = 560f;
+        // 640, up from 560 the day Vault became the fourth map: the map row divides the
+        // right column between however many maps exist, and at 560 four buttons were 48px
+        // each — too narrow for any of the names to survive.
+        const float panelW = 640f;
         float panelH = quitY + 30f + 16f + 44f;
         if (panel == null)
         {
@@ -150,6 +166,20 @@ public class ConnectUI : MonoBehaviour
             panel.SetPixel(0, 0, Color.white);
             panel.Apply();
         }
+
+        // CENTERED, not parked in the top-left corner — this is the first screen of the game,
+        // and it sat at (0,0) purely because the coordinates inside it are absolute. A group
+        // makes those same absolute coordinates panel-relative, so centering costs no layout
+        // surgery. Clamped so a window smaller than the panel pins to the corner as before.
+        float panelX = Mathf.Max(0f, (Screen.width - panelW) * 0.5f);
+        float panelY = Mathf.Max(0f, (Screen.height - panelH) * 0.5f);
+
+        // Name above the panel, where it costs no panel space. Skipped when there is no room,
+        // which is exactly the cramped case where a title matters least.
+        if (panelY >= 48f)
+            GUI.Label(new Rect(0f, panelY - 48f, Screen.width, 40f), "MOMENTUM  ARENA", title);
+
+        GUI.BeginGroup(new Rect(panelX, panelY, panelW, panelH));
         GUI.color = new Color(0.06f, 0.07f, 0.09f, 0.94f);
         GUI.DrawTexture(new Rect(0, 0, panelW, panelH), panel);
         GUI.color = Color.white;
@@ -162,9 +192,10 @@ public class ConnectUI : MonoBehaviour
 
         // Says out loud that hosting ignores the two fields above. Behind a tunnel they are
         // different numbers, and a host who assumes the port box applies to them binds a port
-        // nothing forwards to and gets no error to explain it.
+        // nothing forwards to and gets no error to explain it. Sized to END where the button
+        // row begins — at 20 tall it ran 10px under the buttons and drew clipped.
         if (hostBindPort != port)
-            GUI.Label(new Rect(12, 62, 320, 20), $"hosting binds :{hostBindPort}", hint);
+            GUI.Label(new Rect(12, 56, 320, 16), $"hosting binds :{hostBindPort}", hint);
 
         // Loadout is chosen HERE, before connecting, and locked for the match. Picking after
         // you spawn would make it a counter-pick rather than a commitment.
@@ -180,11 +211,14 @@ public class ConnectUI : MonoBehaviour
                     on ? selected : button))
                 LoadoutChoice.WeaponIndex = i;
         }
-        GUI.Label(new Rect(12, 170, panelW - 24f, 22),
-            LoadoutChoice.Describe(LoadoutChoice.WeaponIndex), label);
+        // Wrapped over two lines at a smaller size: the Rocket and Knife strings are ~150
+        // characters, which never fit one 16pt line even before the panel was this wide —
+        // the tail of exactly the two most unusual loadouts was silently clipped.
+        GUI.Label(new Rect(12, 170, panelW - 24f, 36),
+            LoadoutChoice.Describe(LoadoutChoice.WeaponIndex), wrapDesc);
         GUI.Label(new Rect(330, 10, panelW - 342f, 22), "Map (host decides)", label);
 
-        GUI.Label(new Rect(12, 200, 400, 24), "Passive (locked for the match)", label);
+        GUI.Label(new Rect(12, 242, 400, 24), "Passive (locked for the match)", label);
         var opts = PassiveChoice.Options;
         for (int i = 0; i < opts.Length; i++)
         {
@@ -221,9 +255,14 @@ public class ConnectUI : MonoBehaviour
         for (int i = 0; i < MapChoice.Names.Length; i++)
         {
             if (GUI.Button(new Rect(mapRowX + i * (mapBtnW + 6f), 36, mapBtnW, 28), MapChoice.Names[i],
-                    MapChoice.Index == i ? selected : button))
+                    MapChoice.Index == i ? mapSelected : mapBtn))
                 MapChoice.Index = i;
         }
+
+        // What the selected map IS. The strings existed for every map (MapChoice.Describe) and
+        // this screen never showed them — so Vault shipped as a name with no way to learn it
+        // is the enclosed one short of loading it. Full-width row under the weapon description.
+        GUI.Label(new Rect(12, 208, panelW - 24f, 30), MapChoice.Describe(MapChoice.Index), hint);
 
         // Game mode. Host-only in effect — MatchManager reads this on the server and syncs it,
         // so a client toggling it changes nothing about the match they join. Cycles because it
@@ -281,7 +320,10 @@ public class ConnectUI : MonoBehaviour
         if (!string.IsNullOrEmpty(lastError))
             GUI.Label(new Rect(12, panelH - 46f, panelW - 24f, 40f), lastError, error);
 
-        // Last, so it covers the connect panel rather than fighting it for the same pixels.
+        GUI.EndGroup();
+
+        // Last and OUTSIDE the group, so it covers the connect panel in screen space rather
+        // than being clipped to it.
         KeybindsUI.Draw();
     }
 
