@@ -30,9 +30,14 @@ public class Rocket : MonoBehaviour
         if (dir.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(dir);
     }
 
-    void FixedUpdate()
+    // Update, not FixedUpdate, deliberately: at 60 m/s a fixed tick moves the rocket 1.2m per
+    // step, which a 144Hz screen renders as the same position for three frames and then a
+    // teleport — strobing is half of why the projectile was hard to see. Per-frame movement
+    // with dt is the same distance over the same time, and the sweep below makes the step
+    // length irrelevant to hit detection.
+    void Update()
     {
-        float dt = Time.fixedDeltaTime;
+        float dt = Time.deltaTime;
         life -= dt;
         if (life <= 0f) { Boom(transform.position); return; }
 

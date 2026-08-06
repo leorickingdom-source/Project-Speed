@@ -817,16 +817,31 @@ public class WeaponController : MonoBehaviour
 
     void FireProjectile(Weapon w)
     {
-        Vector3 origin = aim.position + aim.forward * 0.6f; // spawn just ahead of the camera
+        // From a MUZZLE, not the eye. The rocket used to spawn dead on the camera ray, which
+        // made it invisible to the one player who most needs to see it: flying exactly along
+        // your own line of sight, it never moves across your screen — it sits behind the
+        // crosshair dot and shrinks (playtest: "cant see rocket projectile"). Offset to the
+        // right and below, where every FPS puts the launcher, so the shot visibly LEAVES you.
+        Vector3 origin = aim.position + aim.right * 0.28f - aim.up * 0.18f + aim.forward * 0.5f;
+
+        // Converge on what the crosshair actually points at, so the offset costs no accuracy.
+        // Skipped point-blank (rocket-jump floor shots are ~1-1.7m away), where convergence
+        // math degenerates and a blast 0.28m off centre is nothing against a 5m radius.
+        Vector3 dir = aim.forward;
+        if (NearestHitIgnoringSelf(aim.position, aim.forward, 300f, out RaycastHit aimHit)
+            && aimHit.distance > 2f)
+            dir = (aimHit.point - origin).normalized;
 
         // Always spawn locally — the shooter's rocket must leave the barrel THIS frame.
         // Offline and on the host this copy is also the authoritative one (Damage writes go
         // through). On a pure client it is only a visual: every Damage/impulse it lands is
         // authority-refused, so the server is told to fire the REAL one. Same split SimpleBot
         // uses for its shots — visuals everywhere, truth on the server.
-        SpawnRocket(origin, aim.forward, Current, DamageScale);
+        SpawnRocket(origin, dir, Current, DamageScale);
+        // The CONVERGED direction, not aim.forward — the server's rocket must fly the same
+        // line as the one the shooter is watching, or the visual hits and the real one misses.
         if (net != null && net.IsSpawned && !net.IsServerStarted)
-            net.ReportRocket(origin, aim.forward, Current, DamageScale);
+            net.ReportRocket(origin, dir, Current, DamageScale);
     }
 
     // Shared by the local fire path and PlayerNetwork's rocket RPCs, so every machine builds
@@ -843,10 +858,29 @@ public class WeaponController : MonoBehaviour
         go.transform.position = origin;
         go.transform.localScale = Vector3.one * 0.35f;
         Destroy(go.GetComponent<Collider>()); // Rocket sweeps with SphereCast; no physical collider
-        var rend = go.GetComponent<Renderer>();
-        Color c = new Color(1f, 0.5f, 0.15f);
-        if (rend.material.HasProperty("_BaseColor")) rend.material.SetColor("_BaseColor", c);
-        rend.material.color = c;
+
+        // UNLIT, and with a trail. A lit sphere is whatever the room's light says it is —
+        // dim, shadowed on the side you see — and a 60 m/s object with no trail exists on
+        // screen for a handful of frames with nothing marking where it has been. The trail is
+        // most of the projectile's visibility; every shooter's rocket is really a smoke line.
+        // Same shader-with-fallback pattern the grapple rope uses, for the same build reason.
+        Color c = new Color(1f, 0.55f, 0.15f);
+        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Sprites/Default");
+        var mat = new Material(sh);
+        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
+        mat.color = c;
+        go.GetComponent<Renderer>().material = mat;
+
+        var trail = go.AddComponent<TrailRenderer>();
+        trail.material = mat;
+        trail.time = 0.3f;
+        trail.startWidth = 0.28f;
+        trail.endWidth = 0f;
+        trail.startColor = c;
+        trail.endColor = new Color(c.r, c.g, c.b, 0f);
+        trail.numCapVertices = 2;
+
         var rocket = go.AddComponent<Rocket>();
         rocket.speed = w.projectileSpeed;
         rocket.blastRadius = w.blastRadius;
