@@ -513,7 +513,15 @@ public class WeaponController : MonoBehaviour
                 if (kb.digit5Key.wasPressedThisFrame) Current = 4;
                 // digit6-8 unbound while Bow / Knives / Crossbow are shelved.
                 Current = Mathf.Clamp(Current, 0, weapons.Length - 1);
-                if (Current != prev) reloadDoneAt = 0f;   // switching cancels a reload
+                if (Current != prev)
+                {
+                    reloadDoneAt = 0f;   // switching cancels a reload
+                    // ...and an EMPTY gun starts its own. Arriving on a dry weapon and having
+                    // it sit inert until you press fire (to be told "no") was a hidden click
+                    // tax; StartReload's own guards skip the knife and the pickup launcher.
+                    var sw = CurrentWeapon;
+                    if (sw != null && sw.magSize > 0 && sw.ammo <= 0) StartReload();
+                }
             }
         }
 
@@ -566,8 +574,17 @@ public class WeaponController : MonoBehaviour
                             knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife
                                                                     : KnifeView.Mode.None);
                     }
+
+                    // Reload starts the INSTANT the mag runs dry, not on the next trigger pull
+                    // — the pull that used to start it is the one that loses a fight (playtest
+                    // ask: "automatic reload when no ammo"). Read back through CurrentWeapon,
+                    // because the pickup-launcher branch above may just have swapped the slot:
+                    // a handed-back gun with rounds left must not be reloaded out from under
+                    // the player, while a handed-back EMPTY one should start immediately.
+                    var cw = CurrentWeapon;
+                    if (cw != null && cw.magSize > 0 && cw.ammo <= 0) StartReload();
                 }
-                else StartReload(); // clicked empty -> auto-reload
+                else StartReload(); // clicked a gun that was ALREADY empty -> reload it
             }
         }
 
