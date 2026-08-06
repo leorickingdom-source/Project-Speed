@@ -241,7 +241,23 @@ Small fix, but load-bearing for any VPS route.
 
 ---
 
-## 4b. Open: speed above 16 m/s buys nothing in a fight
+## 4b. RESOLVED 2026-08-06: speed above 16 m/s buys nothing in a fight
+
+Taken: **option 1, the second tier.** MomentumDamage now ramps 9->16 to +25% exactly as
+before (no existing breakpoint moved), then 16->28 to +40% total. 28 is reachable only by the
+verbs — fast reel sustains ~24, a rocket launch ~27, a slung release low 30s — so the top of
+the curve is theirs alone, briefly. Ceiling checked before shipping: 0.40 keeps point-blank
+shotgun at 145.6 and a sniper body at 140 against 150 HP, both still 2-shots; 0.44 is where
+the shotgun one-shots, and the tooltip on tier2MaxBonus carries that warning now. The
+connect-screen line reads "+25% by 16 m/s, +40% at rope/rocket speeds".
+
+Still open from the same review, deliberately parked: one real-latency session (ParrelSync is
+installed; clone the editor, FishNet latency sim at ~100ms, watch pads / rope / cooldown for
+reconcile snap) before any creative-design branch touches netcode-adjacent feel.
+
+The original analysis, kept for the numbers:
+
+### was: speed above 16 m/s buys nothing in a fight
 
 Surfaced 2026-07-27 while adding Slipstream, from the question "Highground and Slipstream seem
 the same?". They are not — but the answer exposed something worse than an overlap.

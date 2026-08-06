@@ -23,22 +23,36 @@ using UnityEngine;
 [RequireComponent(typeof(PlayerMotor))]
 public class MomentumDamage : MonoBehaviour
 {
-    [Tooltip("Damage bonus at fullBonusSpeed and above. 0.25 = +25%. It was 0.4 while this was " +
+    [Tooltip("Damage bonus at fullBonusSpeed. 0.25 = +25%. It was 0.4 while this was " +
              "a PICK, where the bonus was paid for by giving up a slot; baseline removes that " +
              "price, so the number came down with it — otherwise every gun in the game quietly " +
              "gets a shorter TTK. Breakpoints at 0.25 against 150 HP: revolver 65 -> 81, a " +
              "2-shot body kill inside its 20m full-damage band instead of 3 (Vitality's 190 " +
              "puts it back to 3, which is now what Vitality answers); sniper 100 -> 125, still " +
-             "a 2-shot; shotgun 8x13 = 104 -> 130, still a 2-shot with 20 to spare. Do NOT " +
-             "raise past 0.44 without rechecking those: there a point-blank shotgun one-shots, " +
-             "and at 0.5 a sniper body shot is exactly 150 and does the same.")]
+             "a 2-shot; shotgun 8x13 = 104 -> 130, still a 2-shot with 20 to spare.")]
     public float maxBonus = 0.25f;
     [Tooltip("Speed the bonus starts ramping from. Matches PlayerMotor.groundSpeed by default, " +
              "so plain running earns nothing at all.")]
     public float rampStartSpeed = 9f;
-    [Tooltip("Speed at which the bonus is fully earned. 16 matches the slide ceiling and " +
+    [Tooltip("Speed at which TIER ONE is fully earned. 16 matches the slide ceiling and " +
              "roughly the air ceiling (groundSpeed * flowMax).")]
     public float fullBonusSpeed = 16f;
+
+    [Header("Tier two — the speeds only the verbs reach")]
+    [Tooltip("Bonus at tier2FullSpeed and above, TOTAL (not added to maxBonus). The second " +
+             "segment exists because the curve used to stop at 16, which every slide and bhop " +
+             "already reaches — so the grapple, the rocket jump and the slingshot release were " +
+             "all damage-neutral, and the connect screen's 'speed is damage' was true only up " +
+             "to the speed you get for tapping crouch (BACKLOG 4b). 16->28 at +25->+40% makes " +
+             "the verbs worth damage without touching anything below 16: nothing existing is " +
+             "nerfed, tier one breakpoints hold exactly. CEILING CHECK, against 150 HP: 0.40 " +
+             "keeps point-blank shotgun at 104*1.40 = 145.6 and a sniper body at 140 — both " +
+             "still 2-shots. 0.44 is where the shotgun one-shots; do not raise past it.")]
+    public float tier2MaxBonus = 0.40f;
+    [Tooltip("Speed at which tier two is fully earned. 28: the fast reel sustains ~24, a " +
+             "rocket launch ~27, a slung release arc low 30s — so the top of the curve is " +
+             "reachable ONLY by the movement verbs, briefly, which is the whole point.")]
+    public float tier2FullSpeed = 28f;
 
     [Header("Carry into combat")]
     [Tooltip("Seconds the bonus holds at its peak after you slow down. This is what lets the " +
@@ -59,13 +73,22 @@ public class MomentumDamage : MonoBehaviour
     public float Scale => 1f + held;
 
     // Instant, speed-only bonus. `held` snaps up to this and lags behind it on the way down.
+    // Two segments: 9->16 earns the first 25% (slide/bhop territory, unchanged since it was
+    // tuned), 16->28 climbs to 40% (grapple/rocket territory — see tier2MaxBonus for why).
     float SpeedBonus
     {
         get
         {
-            float span = Mathf.Max(0.01f, fullBonusSpeed - rampStartSpeed);
-            float t = Mathf.Clamp01((motor.Speed - rampStartSpeed) / span);
-            return maxBonus * t;
+            float speed = motor.Speed;
+            float span1 = Mathf.Max(0.01f, fullBonusSpeed - rampStartSpeed);
+            float bonus = maxBonus * Mathf.Clamp01((speed - rampStartSpeed) / span1);
+            if (speed > fullBonusSpeed && tier2MaxBonus > maxBonus)
+            {
+                float span2 = Mathf.Max(0.01f, tier2FullSpeed - fullBonusSpeed);
+                bonus += (tier2MaxBonus - maxBonus)
+                         * Mathf.Clamp01((speed - fullBonusSpeed) / span2);
+            }
+            return bonus;
         }
     }
 

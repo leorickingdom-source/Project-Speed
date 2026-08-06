@@ -46,3 +46,7 @@ sysinfo.txt
 # My debug screenshots (regenerated on demand)
 /[Aa]ssets/[Ss]creenshots/
 /[Aa]ssets/[Ss]creenshots.meta
+
+# Unity crash-recovery dumps
+Assets/_Recovery/
+Assets/_Recovery.meta

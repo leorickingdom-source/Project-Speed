@@ -35,7 +35,7 @@ public class GameMenu : MonoBehaviour
             $"{P(GameAction.Jump)} in mid-air  —  double jump + redirect (DoubleJump passive)",
             "Deathmatch  —  one weapon, most kills wins",
             "Aim for the head (dark cap)  —  bonus damage",
-            "Speed IS damage  —  up to +25% above 9 m/s, held ~1s after you slow",
+            "Speed IS damage  —  +25% by 16 m/s, +40% at rope/rocket speeds, held ~1s",
             "Rocket loadout  —  fire at your own feet to launch; costs health, not momentum",
             $"{B(GameAction.Scoreboard)}  —  hold for scoreboard",
             $"{B(GameAction.ToggleControls)}  —  this card     {B(GameAction.Pause)}  —  pause",

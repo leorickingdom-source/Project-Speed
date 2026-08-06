@@ -844,6 +844,9 @@ public class WeaponController : MonoBehaviour
             net.ReportRocket(origin, dir, Current, DamageScale);
     }
 
+    // The one rocket material — static so a match's worth of rockets cannot leak instances.
+    static Material rocketMat;
+
     // Shared by the local fire path and PlayerNetwork's rocket RPCs, so every machine builds
     // the same projectile from the same stats. Owner is always THIS player: the travel mask
     // must exclude the shooter (rocket-jumping fires at your own feet) and self-damage has to
@@ -864,16 +867,24 @@ public class WeaponController : MonoBehaviour
         // screen for a handful of frames with nothing marking where it has been. The trail is
         // most of the projectile's visibility; every shooter's rocket is really a smoke line.
         // Same shader-with-fallback pattern the grapple rope uses, for the same build reason.
+        //
+        // ONE material, shared by every rocket ever fired (sharedMaterial, static cache).
+        // Destroy(gameObject) does not destroy materials a renderer instantiated, so a
+        // per-rocket `new Material` is a leak the length of a match — an automatic launcher
+        // at 0.9s/shot is ~1300 dead materials in a twenty-minute session.
         Color c = new Color(1f, 0.55f, 0.15f);
-        Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
-        if (sh == null) sh = Shader.Find("Sprites/Default");
-        var mat = new Material(sh);
-        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
-        mat.color = c;
-        go.GetComponent<Renderer>().material = mat;
+        if (rocketMat == null)
+        {
+            Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Sprites/Default");
+            rocketMat = new Material(sh);
+            if (rocketMat.HasProperty("_BaseColor")) rocketMat.SetColor("_BaseColor", c);
+            rocketMat.color = c;
+        }
+        go.GetComponent<Renderer>().sharedMaterial = rocketMat;
 
         var trail = go.AddComponent<TrailRenderer>();
-        trail.material = mat;
+        trail.sharedMaterial = rocketMat;
         trail.time = 0.3f;
         trail.startWidth = 0.28f;
         trail.endWidth = 0f;
