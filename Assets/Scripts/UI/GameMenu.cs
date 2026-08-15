@@ -29,7 +29,7 @@ public class GameMenu : MonoBehaviour
             $"{B(GameAction.Jump)}  —  jump (hold to bunny-hop)",
             $"{B(GameAction.Crouch)}  —  crouch · slide · crouch-jump",
             $"Mouse  —  look     {B(GameAction.Fire)}  —  fire     {B(GameAction.Reload)}  —  reload",
-            $"{B(GameAction.Scope)}  —  scope (sniper)     Knife loadout: one hit kills",
+            $"{B(GameAction.Scope)}  —  scope (sniper)     {B(GameAction.Melee)}  —  melee (2.5m)",
             $"{B(GameAction.Grapple)}  —  grapple: hold to pull, aim PAST yourself to swing",
             $"{P(GameAction.Jump)} against a wall in mid-air  —  wall jump (alternate walls)",
             $"{P(GameAction.Jump)} in mid-air  —  double jump + redirect (DoubleJump passive)",

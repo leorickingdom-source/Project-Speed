@@ -63,10 +63,10 @@ public class InputReader : MonoBehaviour
         if (Keybinds.Pressed(GameAction.Dash)) dashBuffered = true;
 
         FireHeld = Keybinds.Held(GameAction.Fire);
-        // Buffered like jump, and for the same reason: a tap between two fixed ticks would
-        // otherwise be dropped and the swing would keep its rope by luck of the frame timing.
-        if (Keybinds.Pressed(GameAction.Fire) && weapon != null && weapon.CurrentIsMelee)
-            meleeBuffered = true;
+        // Melee is its own button now rather than "fire while holding the knife", so the sim
+        // no longer has to ask what weapon you carry to know a swing happened. Still buffered
+        // like jump: a tap between two fixed ticks would otherwise be dropped.
+        if (Keybinds.Pressed(GameAction.Melee)) meleeBuffered = true;
         GrappleHeld = Keybinds.Held(GameAction.Grapple);
         CrouchHeld = Keybinds.Held(GameAction.Crouch);
 

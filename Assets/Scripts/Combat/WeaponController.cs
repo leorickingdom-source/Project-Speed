@@ -118,9 +118,27 @@ public class WeaponController : MonoBehaviour
 
     [Header("Melee")]
     [Tooltip("Forgiveness radius on the swing sweep — a melee that has to be aimed like a " +
-             "sniper is one nobody reaches for in the panic it exists for. Reach and cooldown " +
-             "live on the Knife weapon itself (range / cycle), since it is a weapon now.")]
+             "sniper is one nobody reaches for in the panic it exists for. Shared by the quick " +
+             "melee and by the oddball swing, which is why it lives here rather than on a " +
+             "weapon: only one of those two is a weapon.")]
     public float meleeRadius = 0.5f;
+
+    [Tooltip("Damage of the UNIVERSAL quick melee — the one every player has on its own key, " +
+             "whatever they are holding. Not lethal, unlike the knife it replaces: that was a " +
+             "one-hit kill because it cost you a gun for the entire match, and the same swing " +
+             "handed to everyone for free would make every close-range fight a race to press " +
+             "V. 70 against 150 HP is three taps from full, which nobody is standing still " +
+             "for; it is a finisher and a panic button, not an opener. Momentum-scaled like " +
+             "every other outgoing number, so arriving fast turns it into two.")]
+    public float quickMeleeDamage = 70f;
+    [Tooltip("Reach of the quick melee. Shorter than the knife's 3.5, which was a weapon you " +
+             "built a loadout around and needed the range to justify itself. 2.5 is about a " +
+             "capsule and a half — you have to actually be there.")]
+    public float quickMeleeRange = 2.5f;
+    [Tooltip("Seconds between quick melees. Long enough that mashing it is worse than shooting " +
+             "with almost anything, which is the point: melee is what you do when shooting is " +
+             "not available.")]
+    public float quickMeleeCooldown = 0.9f;
 
     [Header("Tracers")]
     public float tracerTime = 0.04f;
@@ -233,6 +251,7 @@ public class WeaponController : MonoBehaviour
     float reloadDoneAt;
     float reloadStartedAt;
     KnifeView knifeView;        // owner-only viewmodel, built at runtime
+    float meleeNextAt;          // quick melee cooldown, independent of the weapon's cycle
     int preBallIndex;           // weapon to restore when the ball leaves your hands
     MatchManager match; // oddball carrier check; found lazily, null offline
 
@@ -529,6 +548,12 @@ public class WeaponController : MonoBehaviour
         // slots are off entirely in the default deathmatch mode.
         if (Keybinds.Pressed(GameAction.Reload)) StartReload();
 
+        // Quick melee, deliberately OUTSIDE the !Reloading gate below: being mid-reload with
+        // someone in your face is the single most common reason to swing, and a melee that
+        // politely waits for the magazine is a melee that is never there when it is needed.
+        // It does not cancel the reload either — the swing happens, the mag keeps filling.
+        if (Keybinds.Pressed(GameAction.Melee)) TryQuickMelee();
+
         Weapon w = CurrentWeapon;
 
         // Scope state. Dropped during a reload: working the bolt with your eye in the glass
@@ -660,14 +685,37 @@ public class WeaponController : MonoBehaviour
         }
     }
 
-    // Instant-kill swing. The reward for closing to touching distance in a game built around
-    // closing distance — grapple in, dash past a sniper's bad range, execute. Lethal rather
-    // than merely heavy so the outcome is never a coin-flip on the victim's remaining HP:
-    // if you got there, you won, and that clarity is what makes people go for it.
+    // The universal quick melee: every player, every weapon, its own key.
+    //
+    // It replaces the Knife LOADOUT, which was a genuinely different bargain — no gun at all,
+    // in exchange for a 3.5m one-hit kill. That bargain is what justified the lethality, and
+    // it is exactly what does not survive being handed to everybody: a free instant kill on a
+    // 0.75s cycle would end every close fight before either gun mattered. So this swing is
+    // ordinary damage on a cooldown, and the knife weapon stays in weapons[] shelved (see
+    // LoadoutChoice) rather than deleted, because the oddball still swings through the same
+    // path and every stored slot index still has to mean what it meant.
+    void TryQuickMelee()
+    {
+        if (Time.time < meleeNextAt) return;
+        // Carrying the oddball already melees with Fire, and its swing is the one that is
+        // supposed to be lethal. Two melee buttons on one weapon is just a way to spend a
+        // cooldown you did not mean to.
+        if (CurrentIsMelee) return;
+
+        meleeNextAt = Time.time + quickMeleeCooldown;
+        // Momentum-scaled, like the guns: 70 becomes 98 at rope speed, which is what turns a
+        // three-tap into a two-tap for the player who actually arrived fast.
+        Swing(quickMeleeRange, quickMeleeDamage * DamageScale, QuickMeleeTracer, quick: true);
+    }
+
+    // The weapon-driven melee: the shelved knife, and the oddball you are forced to carry.
+    void Melee(Weapon w) => Swing(w.range, w.damage, w.tracer, quick: false);
+
+    // One swing implementation, whoever asked for it.
     //
     // Deliberately no cone or lunge: it lands where the crosshair is, which keeps the
     // counterplay honest — back up, or shoot the person sprinting at you.
-    void Melee(Weapon w)
+    void Swing(float range, float damage, Color tracerColor, bool quick)
     {
         if (aim == null) return;
 
@@ -676,13 +724,15 @@ public class WeaponController : MonoBehaviour
         // around, and a silent invisible whiff would make the approach free.
         if (audioFx != null) audioFx.PlayMelee();
         if (net != null && net.IsSpawned) net.ReportFire(MeleeAudioIndex);
-        if (knifeView != null) knifeView.Swing();
-        SlashFx(w);
+        // A quick melee BORROWS the viewmodel for one swing — your hands are meant to be full
+        // of gun — where a knife or ball swing is the thing already in them.
+        if (knifeView != null) { if (quick) knifeView.QuickSwing(); else knifeView.Swing(); }
+        SlashFx(range, tracerColor);
 
         // Sweep rather than a thin ray, and take the first thing that is not us. Uses the
         // same self-exclusion rule as hitscan, since our own capsule sits on the muzzle.
         int n = Physics.SphereCastNonAlloc(aim.position, meleeRadius, aim.forward, rayHits,
-            w.range, hitMask, QueryTriggerInteraction.Ignore);
+            range, hitMask, QueryTriggerInteraction.Ignore);
         float bestDist = float.MaxValue;
         RaycastHit best = default;
         bool found = false;
@@ -698,19 +748,23 @@ public class WeaponController : MonoBehaviour
         if (!found) return;
 
         var target = best.collider.GetComponentInParent<IDamageable>();
-        if (target != null) ApplyDamage(best.collider, target, w.damage, KillKind.Melee);
+        if (target != null) ApplyDamage(best.collider, target, damage, KillKind.Melee);
     }
+
+    // Pale blue, the colour the knife's slash always was — the cue players already read as
+    // "somebody swung at me" should not change just because everybody can do it now.
+    static readonly Color QuickMeleeTracer = new Color(0.85f, 0.92f, 1.00f);
 
     // The arc of the swing, drawn through the SAME pooled renderer and network message the
     // bullet tracers use — so a knife swing is as visible to a bystander as a gunshot, on
     // every machine, for no new plumbing. Diagonal because a horizontal line reads as a
     // laser; a slash has to look like it was swung.
-    void SlashFx(Weapon w)
+    void SlashFx(float range, Color tracerColor)
     {
-        Vector3 mid = aim.position + aim.forward * (w.range * 0.55f);
+        Vector3 mid = aim.position + aim.forward * (range * 0.55f);
         Vector3 a = mid - aim.right * 0.85f + aim.up * 0.35f;
         Vector3 b = mid + aim.right * 0.85f - aim.up * 0.35f;
-        Tracer(a, b, w.tracer);
+        Tracer(a, b, tracerColor);
     }
 
     // Past every armour and Vitality combination there is: armour soaks at most 100, so any

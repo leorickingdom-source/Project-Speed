@@ -149,11 +149,13 @@ public class GrappleHook : MonoBehaviour
              "stab is the cheap version of the same skill. Map hooks are unaffected.")]
     [Range(0f, 1f)] public float actorReleaseBoostScale = 0f;
 
-    [Tooltip("Does swinging a melee weapon drop the rope? The hook buys you the approach and " +
-             "the swing is then taken on foot, which is the price of hook-into-knife: you " +
-             "arrive committed, with no rope to leave on if you miss. Costs the slingshot too " +
-             "— a melee detach never pays the release boost.")]
-    public bool meleeDropsHook = true;
+    [Tooltip("Does a melee swing drop the rope? OFF since melee became universal. The rule " +
+             "existed to price hook-into-knife, where a 28 m/s approach met a ONE-HIT weapon " +
+             "and the victim got no mistake to punish. A quick melee is a 70-damage tap that " +
+             "kills nobody from full health, so there is no execute left to tax — and taxing " +
+             "it anyway would mean every panic swing on a rope cost you the swing. Kept as a " +
+             "switch because the day melee gets heavier, this is the first lever to pull.")]
+    public bool meleeDropsHook = false;
     [Tooltip("Seconds the rope stays unavailable after a swing, on top of the normal cooldown " +
              "that a detach already starts. Kept as its own number because a melee detach must " +
              "commit you even if the cooldown were tuned down to nothing: you arrive with a " +

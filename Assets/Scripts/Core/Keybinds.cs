@@ -23,6 +23,9 @@ public enum GameAction
     Pause,
     ToggleControls,
     ToggleDebug,
+    // Appended, not inserted: Load reads saved binds per action, so putting a new one in the
+    // middle would hand every action below it somebody else's key.
+    Melee,
 }
 
 // One physical input: a keyboard key OR a mouse button, never both.
@@ -165,6 +168,10 @@ public static class Keybinds
         Set(GameAction.Pause, Key.Escape, Key.None);
         Set(GameAction.ToggleControls, Key.F1, Key.None);
         Set(GameAction.ToggleDebug, Key.F3, Key.None);
+        // V, with F as an alternate. Melee stopped being a weapon you pick and became the
+        // thing every player has at all times, so it needs the bind the genre already trained
+        // people to reach for without thinking about it.
+        Set(GameAction.Melee, Key.V, Key.F);
         binds[(int)GameAction.Fire, 0] = Bind.FromMouse(0);
         binds[(int)GameAction.Scope, 0] = Bind.FromMouse(1);   // right mouse — the instinct
 
@@ -332,6 +339,7 @@ public static class Keybinds
             case GameAction.Pause: return "Pause menu";
             case GameAction.ToggleControls: return "Controls card";
             case GameAction.ToggleDebug: return "Debug readout";
+            case GameAction.Melee: return "Melee";
             default: return a.ToString();
         }
     }

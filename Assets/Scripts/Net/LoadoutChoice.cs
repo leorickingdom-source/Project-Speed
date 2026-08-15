@@ -18,7 +18,11 @@ public static class LoadoutChoice
     // this is a MENU change only, so nothing that stores a weapons[] index moves, the pickup
     // and objective slots keep their numbers, and restoring either is putting its name and
     // slot back into these two arrays.
-    public static readonly string[] Names = { "Revolver", "Sniper", "Shotgun", "Knife", "Rocket" };
+    // Knife SHELVED 2026-08-06: melee became a universal action on its own key (see
+    // WeaponController.TryQuickMelee) rather than a loadout that traded away your gun. Shelved
+    // the same way the Rifle and SMG were -- the weapon keeps its slot in weapons[], so the
+    // oddball swap, the viewmodel and every stored index still mean what they meant.
+    public static readonly string[] Names = { "Revolver", "Sniper", "Shotgun", "Rocket" };
 
     // Where each choice lives in WeaponController.weapons. Mapped rather than assumed, so a
     // shelved entry — or another appended weapon — cannot silently shift what a menu position
@@ -30,7 +34,7 @@ public static class LoadoutChoice
         2,                                  // Sniper
         // 3,                               // SMG      — shelved
         4,                                  // Shotgun
-        WeaponController.KnifeIndex,
+        // WeaponController.KnifeIndex,     — shelved, melee is universal now
         WeaponController.RocketIndex,
     };
 
@@ -57,7 +61,7 @@ public static class LoadoutChoice
             case 3: return "SMG - close-mid pressure. Full to 20m, down to 40% by 45m.";
             case 4: return "Shotgun - brutal inside 8m, nearly harmless by 20m. You must close.";
             case WeaponController.KnifeIndex:
-                return "Knife - ONE HIT KILLS, reach 3.5m, no gun at all. Pure movement build: nothing at range, unanswerable up close.";
+                return "Knife - ONE HIT KILLS, reach 3.5m, no gun at all. Pure movement build: nothing at range, unanswerable up close.";  // shelved
             case WeaponController.RocketIndex:
                 return "Rocket - 4 tubes, 2.6s reload, 5m splash, +40 for a DIRECT hit. Shoot your own feet to launch: the fastest way to build speed, paid for in health.";
             default: return "";

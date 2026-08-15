@@ -36,6 +36,12 @@ public class KnifeView : MonoBehaviour
     Mode mode = Mode.None;
     float swingStartedAt = -99f;
 
+    // Quick melee borrows the viewmodel for the length of one swing and gives it back. 0 =
+    // not borrowed. Without this the blade would either live on screen permanently (it is
+    // not what you are holding any more) or never appear at all (and a melee with no
+    // viewmodel is the invisible-attack problem this class was written to solve).
+    float quickUntil;
+
     public void Build(Transform cam)
     {
         if (model != null || cam == null) return;
@@ -101,10 +107,30 @@ public class KnifeView : MonoBehaviour
 
     public void Swing() => swingStartedAt = Time.time;
 
+    // Everybody has a melee now, so the blade has to appear for the swing even when your
+    // hands are meant to be full of gun. Holding the ball is left alone: that swing already
+    // has its own viewmodel, and swapping it for a knife would misreport what you carry.
+    public void QuickSwing()
+    {
+        if (mode == Mode.None)
+        {
+            SetMode(Mode.Knife);
+            quickUntil = Time.time + SwingOut + SwingBack;
+        }
+        Swing();
+    }
+
     // LateUpdate so the camera has finished moving for the frame — a viewmodel driven in
     // Update lags the view by a frame and visibly swims when you flick.
     void LateUpdate()
     {
+        // Hand the viewmodel back the moment the borrowed swing finishes.
+        if (quickUntil > 0f && Time.time >= quickUntil)
+        {
+            quickUntil = 0f;
+            SetMode(Mode.None);
+        }
+
         if (mode == Mode.None) return;
         Transform held = mode == Mode.Ball ? ballModel : model;
         if (held == null || !held.gameObject.activeSelf) return;
