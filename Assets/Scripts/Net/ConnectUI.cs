@@ -51,7 +51,7 @@ public class ConnectUI : MonoBehaviour
 
     // A host attempt is in flight. Without this, clicking Host again while the first attempt is
     // still resolving subscribes OnServerState a SECOND time — and every extra subscription
-    // runs LoadChosenMap and StartConnection again once one finally succeeds.
+    // loads the map and starts a connection again once one finally succeeds.
     bool hosting;
 
     // Same for an explicit Client press. Tracked separately from `hosting` because hosting also
@@ -354,8 +354,57 @@ public class ConnectUI : MonoBehaviour
         nm.ServerManager.OnServerConnectionState -= OnServerState;
         hosting = false;
 
-        LoadChosenMap(nm);
-        nm.ClientManager.StartConnection();
+        // The map has to be LOADED before the local client connects. It used to be told to
+        // load and then connected on the very next line, and LoadGlobalScenes is asynchronous:
+        // the client got in first, PlayerSpawner fired OnClientLoadedStartScenes against the
+        // scene we were LEAVING, and the player was placed at that scene's spawn point (or at
+        // the prefab's, once SpawnPointBinder's Transforms died with it). Then the new map
+        // replaced everything around them — a player standing at Arena's coordinates inside
+        // Vault, i.e. outside the map. Only on the FIRST host, because hosting a second time
+        // means already being in the chosen scene and skipping the load entirely.
+        string want = MapChoice.Selected;
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == want)
+        {
+            nm.ClientManager.StartConnection();   // already here, nothing to wait for
+            return;
+        }
+
+        // A scene missing from the build cannot raise OnLoadEnd (FishNet only invokes it after
+        // a VALID scene loads), so waiting on it would hang at "Hosting..." forever. Checked
+        // before anything starts, while this panel is still alive to show the message — this
+        // is exactly what Vault did between being added to the map list and existing as a file.
+        if (!Application.CanStreamedLevelBeLoaded(want))
+        {
+            nm.ServerManager.StopConnection(true);
+            lastError = $"Map \"{want}\" is not in this build. Add Assets/Scenes/{want}.unity " +
+                        "under File > Build Profiles, then host again.";
+            return;
+        }
+
+        LoadMapThenConnect(nm, want);
+    }
+
+    // Load the map, then connect our own client once it has actually landed.
+    //
+    // Static, and the handler deliberately captures no `this`: ReplaceOption.All destroys the
+    // scene this component lives in, so by the time the load ends the ConnectUI that started
+    // it is gone. The NetworkManager persists, which is all the callback touches.
+    static void LoadMapThenConnect(FishNet.Managing.NetworkManager nm, string want)
+    {
+        void OnLoadEnd(FishNet.Managing.Scened.SceneLoadEndEventArgs args)
+        {
+            nm.SceneManager.OnLoadEnd -= OnLoadEnd;
+            // SpawnPointBinder has already rebound by now — it listens to Unity's sceneLoaded,
+            // which fires during the load this event marks the end of — so the spawner is
+            // pointed at the new map's points before anybody spawns on them.
+            nm.ClientManager.StartConnection();
+        }
+
+        nm.SceneManager.OnLoadEnd += OnLoadEnd;
+
+        var data = new FishNet.Managing.Scened.SceneLoadData(want);
+        data.ReplaceScenes = FishNet.Managing.Scened.ReplaceOption.All;
+        nm.SceneManager.LoadGlobalScenes(data);
     }
 
     // A failed join is otherwise completely silent — the button clicks, nothing happens, and the
@@ -379,19 +428,6 @@ public class ConnectUI : MonoBehaviour
         joining = false;
         lastError = $"Could not reach a host at {address}:{port}. Check the address and port, " +
                     "and that the host has actually clicked Host.";
-    }
-
-    // Load the host's map as a global scene so joining clients receive it automatically.
-    // Skipped when we are already in it, since replacing a scene with itself would needlessly
-    // destroy and rebuild everything in it.
-    static void LoadChosenMap(FishNet.Managing.NetworkManager nm)
-    {
-        string want = MapChoice.Selected;
-        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == want) return;
-
-        var data = new FishNet.Managing.Scened.SceneLoadData(want);
-        data.ReplaceScenes = FishNet.Managing.Scened.ReplaceOption.All;
-        nm.SceneManager.LoadGlobalScenes(data);
     }
 
     // Push address/port into the transport before any connection starts — afterwards it's too
