@@ -148,6 +148,25 @@ public class WeaponController : MonoBehaviour
              "HP is two taps even at speed), which keeps the counterplay a pickup rather than " +
              "a coin flip. Guns are untouched: this is the only passive that scales one verb.")]
     public float executionerMeleeDamage = 108f;
+    [Tooltip("Sweep radius for a quick melee taken at FULL SPEED, replacing meleeRadius as you " +
+             "get faster. This exists because of an arithmetic problem the design walks into " +
+             "on its own: Executioner's one-shot needs ~27 m/s, and at 27 m/s a 2.5m reach is " +
+             "a 111ms contact window -- about six frames -- with no lunge and no aim assist to " +
+             "correct inside it. Every shooter that ships a melee at closing speed adds a " +
+             "lunge for exactly this reason. A lunge is the wrong fix here (it moves you, and " +
+             "this game already decides where you are moving), so the forgiveness goes into " +
+             "the sweep radius instead: 1.1 means you may be a metre off line rather than half " +
+             "of one. LATERAL tolerance, not reach -- the swing still lands where the crosshair " +
+             "is, and a standing player gets no more range than they ever had.")]
+    public float meleeRadiusAtSpeed = 1.1f;
+    [Tooltip("Speed at which meleeRadiusAtSpeed is fully applied; below meleeRadiusRampStart " +
+             "the plain meleeRadius is used, and the two interpolate between. Matched to the " +
+             "speed Executioner's one-shot needs, so the forgiveness arrives exactly where the " +
+             "shot it is forgiving becomes possible.")]
+    public float meleeRadiusFullSpeed = 27f;
+    [Tooltip("Speed the widened sweep starts growing from. Above run speed on purpose: walking " +
+             "into someone should be as precise as it ever was.")]
+    public float meleeRadiusRampStart = 12f;
 
     [Header("Tracers")]
     public float tracerTime = 0.04f;
@@ -269,6 +288,7 @@ public class WeaponController : MonoBehaviour
     // none of them puts a lookup on a hot path.
     PassiveLoadout passives;
     bool hasExecutioner;
+    PlayerMotor motor;   // optional — speed source for the melee forgiveness ramp
 
     void OnDestroy()
     {
@@ -283,6 +303,7 @@ public class WeaponController : MonoBehaviour
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();
+        motor = GetComponent<PlayerMotor>();           // optional — absent means no speed ramp
         passives = GetComponent<PassiveLoadout>();     // optional — absent means no passive
         if (passives != null) passives.Changed += ApplyPassives;
         ApplyPassives();
@@ -735,17 +756,31 @@ public class WeaponController : MonoBehaviour
         // three-tap into a two-tap for the player who actually arrived fast. Executioner moves
         // the same curve up a rung -- two taps standing still, one above ~27 m/s.
         float damage = hasExecutioner ? executionerMeleeDamage : quickMeleeDamage;
-        Swing(quickMeleeRange, damage * DamageScale, QuickMeleeTracer, quick: true);
+        Swing(quickMeleeRange, damage * DamageScale, QuickMeleeTracer, quick: true, MeleeRadiusNow);
     }
 
     // The weapon-driven melee: the shelved knife, and the oddball you are forced to carry.
-    void Melee(Weapon w) => Swing(w.range, w.damage, w.tracer, quick: false);
+    // Plain radius: the ball is swung by someone walking, not arriving at 27 m/s.
+    void Melee(Weapon w) => Swing(w.range, w.damage, w.tracer, quick: false, meleeRadius);
+
+    // Sweep radius for a quick melee right now. Grows with your speed, because the faster you
+    // close the less time you spend inside your own reach -- see meleeRadiusAtSpeed.
+    float MeleeRadiusNow
+    {
+        get
+        {
+            if (motor == null || meleeRadiusAtSpeed <= meleeRadius) return meleeRadius;
+            float span = Mathf.Max(0.01f, meleeRadiusFullSpeed - meleeRadiusRampStart);
+            float t = Mathf.Clamp01((motor.Speed - meleeRadiusRampStart) / span);
+            return Mathf.Lerp(meleeRadius, meleeRadiusAtSpeed, t);
+        }
+    }
 
     // One swing implementation, whoever asked for it.
     //
     // Deliberately no cone or lunge: it lands where the crosshair is, which keeps the
     // counterplay honest — back up, or shoot the person sprinting at you.
-    void Swing(float range, float damage, Color tracerColor, bool quick)
+    void Swing(float range, float damage, Color tracerColor, bool quick, float radius)
     {
         if (aim == null) return;
 
@@ -761,7 +796,7 @@ public class WeaponController : MonoBehaviour
 
         // Sweep rather than a thin ray, and take the first thing that is not us. Uses the
         // same self-exclusion rule as hitscan, since our own capsule sits on the muzzle.
-        int n = Physics.SphereCastNonAlloc(aim.position, meleeRadius, aim.forward, rayHits,
+        int n = Physics.SphereCastNonAlloc(aim.position, radius, aim.forward, rayHits,
             range, hitMask, QueryTriggerInteraction.Ignore);
         float bestDist = float.MaxValue;
         RaycastHit best = default;
