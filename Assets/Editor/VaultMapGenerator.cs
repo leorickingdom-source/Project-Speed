@@ -24,10 +24,20 @@ public static class VaultMapGenerator
     const string SourceScene = "Assets/Scenes/Stacks.unity";
     const string OutputScene = "Assets/Scenes/Vault.unity";
 
-    // Interior half-extent on X/Z. Walls sit just outside; the ceiling is low enough that the
-    // rope (maxRange 55) reaches it from anywhere on the floor.
-    const float Half = 30f;
-    const float CeilingY = 16f;
+    // Interior half-extent on X/Z. Walls sit just outside; the ceiling stays well inside the
+    // rope's 55m reach from anywhere on the floor.
+    //
+    // 30 -> 40 and 16 -> 22 after playtest: "feels too cramped, keep hitting platforms". At 60
+    // square a player crossed the entire map in 2.5s at swing speed, and a 16m lid put every
+    // rope arc into the ceiling. The interior thinned out in the same pass -- floor area is up
+    // 78% while the deck SHRANK -- so this is mostly open air rather than more building. Free
+    // air above the deck goes from 10m to 14m, which is what an arc actually needs.
+    const float Half = 40f;
+    const float CeilingY = 22f;
+
+    // Deck top surface. 6 -> 8: enough headroom underneath to run and swing through the low
+    // room rather than duck across it, which was most of "keep hitting platforms".
+    const float DeckY = 8f;
 
     // Every Stacks object that is MAP GEOMETRY, by name. Everything not listed survives.
     static readonly string[] StacksGeometry =
@@ -100,41 +110,44 @@ public static class VaultMapGenerator
 
     static void BuildInterior()
     {
-        // Central mezzanine deck (top y=6) over a low room, on four pillars. The deck is the
-        // mid fight; the room under it is the short-range pocket the shotgun and knife want.
-        Block("Deck", new Vector3(0f, 5.75f, 0f), new Vector3(24f, 0.5f, 24f));
-        Block("DeckPillar_A", new Vector3(10f, 2.875f, 10f), new Vector3(1.2f, 5.75f, 1.2f));
-        Block("DeckPillar_B", new Vector3(-10f, 2.875f, 10f), new Vector3(1.2f, 5.75f, 1.2f));
-        Block("DeckPillar_C", new Vector3(10f, 2.875f, -10f), new Vector3(1.2f, 5.75f, 1.2f));
-        Block("DeckPillar_D", new Vector3(-10f, 2.875f, -10f), new Vector3(1.2f, 5.75f, 1.2f));
+        // Central mezzanine deck on four pillars, with a low room beneath. The deck is the mid
+        // fight; the room under it is the short-range pocket the shotgun and knife want.
+        // 24 wide -> 20: at 24 it spanned 40% of the map at head height, and there was no way
+        // to cross the middle without meeting it.
+        Block("Deck", new Vector3(0f, DeckY - 0.25f, 0f), new Vector3(20f, 0.5f, 20f));
+        Block("DeckPillar_A", new Vector3(8f, (DeckY - 0.5f) * 0.5f, 8f), new Vector3(1.2f, DeckY - 0.5f, 1.2f));
+        Block("DeckPillar_B", new Vector3(-8f, (DeckY - 0.5f) * 0.5f, 8f), new Vector3(1.2f, DeckY - 0.5f, 1.2f));
+        Block("DeckPillar_C", new Vector3(8f, (DeckY - 0.5f) * 0.5f, -8f), new Vector3(1.2f, DeckY - 0.5f, 1.2f));
+        Block("DeckPillar_D", new Vector3(-8f, (DeckY - 0.5f) * 0.5f, -8f), new Vector3(1.2f, DeckY - 0.5f, 1.2f));
 
-        // Two ramps onto the deck, opposite corners, so the deck is walkable without a pad.
-        // 25 degrees — under the 55 slope limit, slideable both ways.
-        var rampN = Block("Ramp_N", new Vector3(-8f, 2.9f, 16.4f), new Vector3(6f, 0.5f, 15f));
+        // Two ramps onto the deck, opposite corners, so it is walkable without a pad. 25
+        // degrees -- under the 55 slope limit, slideable both ways.
+        var rampN = Block("Ramp_N", new Vector3(-10f, DeckY * 0.5f, 19f), new Vector3(6f, 0.5f, 19f));
         rampN.transform.rotation = Quaternion.Euler(-25f, 0f, 0f);
-        var rampS = Block("Ramp_S", new Vector3(8f, 2.9f, -16.4f), new Vector3(6f, 0.5f, 15f));
+        var rampS = Block("Ramp_S", new Vector3(10f, DeckY * 0.5f, -19f), new Vector3(6f, 0.5f, 19f));
         rampS.transform.rotation = Quaternion.Euler(25f, 0f, 0f);
 
-        // Roofed corridors along the E and W walls: inner wall + roof over the lane between it
-        // and the perimeter. The enclosed lanes are what this map exists for — rocket splash
-        // has walls on three sides and a ceiling 6.5 up. Roofs double as walkways.
-        Block("CorridorWall_E", new Vector3(22f, 3f, 0f), new Vector3(1f, 6f, 30f));
-        Block("CorridorRoof_E", new Vector3(26.25f, 6.25f, 0f), new Vector3(8.5f, 0.5f, 30f));
-        Block("CorridorWall_W", new Vector3(-22f, 3f, 0f), new Vector3(1f, 6f, 30f));
-        Block("CorridorRoof_W", new Vector3(-26.25f, 6.25f, 0f), new Vector3(8.5f, 0.5f, 30f));
+        // Roofed corridors along the E and W walls: an inner wall plus a roof over the lane
+        // between it and the perimeter. The enclosed lanes are what this map exists for --
+        // rocket splash with walls on three sides. Lane widened 8m -> 10m and the roof raised
+        // to 7, so it reads as a room you fight in rather than a pipe you get stuck in.
+        Block("CorridorWall_E", new Vector3(30f, 3.5f, 0f), new Vector3(1f, 7f, 40f));
+        Block("CorridorRoof_E", new Vector3(35.25f, 7.25f, 0f), new Vector3(10.5f, 0.5f, 40f));
+        Block("CorridorWall_W", new Vector3(-30f, 3.5f, 0f), new Vector3(1f, 7f, 40f));
+        Block("CorridorRoof_W", new Vector3(-35.25f, 7.25f, 0f), new Vector3(10.5f, 0.5f, 40f));
 
-        // Balconies along the N and S walls at y=9, pad- or rope-reached. High ground with a
-        // ceiling 7m overhead — hookable from the balcony, exposed to it.
-        Block("Balcony_N", new Vector3(0f, 8.75f, 27f), new Vector3(50f, 0.5f, 6f));
-        Block("Balcony_S", new Vector3(0f, 8.75f, -27f), new Vector3(50f, 0.5f, 6f));
+        // Balconies along the N and S walls, pad- or rope-reached. High ground with 11m of
+        // ceiling above it -- hookable from the balcony, and exposed to it.
+        Block("Balcony_N", new Vector3(0f, 10.75f, 37f), new Vector3(60f, 0.5f, 6f));
+        Block("Balcony_S", new Vector3(0f, 10.75f, -37f), new Vector3(60f, 0.5f, 6f));
 
-        // Floor cover, yawed so no two sightlines feel identical.
-        Block("Cover_A", new Vector3(17f, 1f, 17f), new Vector3(3f, 2f, 1.5f), 30f);
-        Block("Cover_B", new Vector3(-17f, 1f, 17f), new Vector3(3f, 2f, 1.5f), -20f);
-        Block("Cover_C", new Vector3(17f, 1f, -17f), new Vector3(3f, 2f, 1.5f), -45f);
-        Block("Cover_D", new Vector3(-17f, 1f, -17f), new Vector3(3f, 2f, 1.5f), 15f);
-        Block("Cover_E", new Vector3(0f, 1f, 20f), new Vector3(4f, 2f, 1.5f), 0f);
-        Block("Cover_F", new Vector3(0f, 1f, -20f), new Vector3(4f, 2f, 1.5f), 0f);
+        // Floor cover, yawed so no two sightlines feel identical. Four, not six, and out in the
+        // corners: the pair that used to sit at z=+-20 stood between the ramps and the deck,
+        // which is exactly where you are moving fastest.
+        Block("Cover_A", new Vector3(24f, 1f, 24f), new Vector3(3f, 2f, 1.5f), 30f);
+        Block("Cover_B", new Vector3(-24f, 1f, 24f), new Vector3(3f, 2f, 1.5f), -20f);
+        Block("Cover_C", new Vector3(24f, 1f, -24f), new Vector3(3f, 2f, 1.5f), -45f);
+        Block("Cover_D", new Vector3(-24f, 1f, -24f), new Vector3(3f, 2f, 1.5f), 15f);
     }
 
     // ---- functional objects kept from Stacks ---------------------------------------------
@@ -172,59 +185,58 @@ public static class VaultMapGenerator
 
     static void PlaceFunctional(Dictionary<string, GameObject> roots)
     {
-        // Perimeter spawns at the floor, facing the centre. 1 and 2 sit at 17, not against the
-        // E/W walls — 24 put them inside the roofed corridors facing the corridor wall two
-        // metres away, which is technically clear and reads as spawning into a closet.
-        Move(roots, "SpawnPoint_1", new Vector3(17f, 1f, 0f), faceCenter: true);
-        Move(roots, "SpawnPoint_2", new Vector3(-17f, 1f, 0f), faceCenter: true);
-        Move(roots, "SpawnPoint_3", new Vector3(0f, 1f, 24f), faceCenter: true);
-        Move(roots, "SpawnPoint_4", new Vector3(0f, 1f, -24f), faceCenter: true);
-        Move(roots, "SpawnPoint_5", new Vector3(20f, 1f, 20f), faceCenter: true);
-        Move(roots, "SpawnPoint_6", new Vector3(-20f, 1f, -20f), faceCenter: true);
+        // Perimeter spawns at the floor, facing the centre, clear of the corridor mouths.
+        Move(roots, "SpawnPoint_1", new Vector3(24f, 1f, 0f), faceCenter: true);
+        Move(roots, "SpawnPoint_2", new Vector3(-24f, 1f, 0f), faceCenter: true);
+        Move(roots, "SpawnPoint_3", new Vector3(0f, 1f, 33f), faceCenter: true);
+        Move(roots, "SpawnPoint_4", new Vector3(0f, 1f, -33f), faceCenter: true);
+        Move(roots, "SpawnPoint_5", new Vector3(26f, 1f, 26f), faceCenter: true);
+        Move(roots, "SpawnPoint_6", new Vector3(-26f, 1f, -26f), faceCenter: true);
 
-        // Pad ceilings, since this map HAS one at 16: apex = up^2/2g at gravity 28.
-        // 19 -> 6.4m (deck), 22 -> 8.6m (balconies), 20 -> 7.1m (corridor roofs).
-        Pad(roots, "Pad_Mid", new Vector3(14f, 0f, -14f), -45f, 19f, 4f);   // onto the deck
-        Pad(roots, "Pad_Mid2", new Vector3(-14f, 0f, 14f), 135f, 19f, 4f);  // opposite corner
-        Pad(roots, "Pad_NE", new Vector3(20f, 0f, 24f), 0f, 22f, 3f);      // N balcony
-        Pad(roots, "Pad_NW", new Vector3(-20f, 0f, -24f), 180f, 22f, 3f);  // S balcony
-        Pad(roots, "Pad_MidNE", new Vector3(26f, 0f, 18f), 180f, 20f, 5f); // E corridor roof
-        Pad(roots, "Pad_MidSW", new Vector3(-26f, 0f, -18f), 0f, 20f, 5f); // W corridor roof
+        // Pad forces are apex = up^2/2g at gravity 28, aimed a metre or so above the surface
+        // each one serves: 22 -> 8.6m (deck at 8), 25.5 -> 11.6m (balconies at 11), 21 -> 7.9m
+        // (corridor roofs at 7.25).
+        Pad(roots, "Pad_Mid", new Vector3(16f, 0f, -16f), -45f, 22f, 5f);   // onto the deck
+        Pad(roots, "Pad_Mid2", new Vector3(-16f, 0f, 16f), 135f, 22f, 5f);  // opposite corner
+        Pad(roots, "Pad_NE", new Vector3(24f, 0f, 33f), 0f, 25.5f, 3f);     // N balcony
+        Pad(roots, "Pad_NW", new Vector3(-24f, 0f, -33f), 180f, 25.5f, 3f); // S balcony
+        Pad(roots, "Pad_MidNE", new Vector3(34f, 0f, 22f), 180f, 21f, 5f);  // E corridor roof
+        Pad(roots, "Pad_MidSW", new Vector3(-34f, 0f, -22f), 0f, 21f, 5f);  // W corridor roof
 
         // Pickups: two deep in the corridors (earned by entering the knife-fight lane), two on
         // the balconies (earned by height).
-        Move(roots, "Pickup_GndE", new Vector3(26f, 1f, 0f));
-        Move(roots, "Pickup_GndW", new Vector3(-26f, 1f, 0f));
-        Move(roots, "Pickup_TopNE", new Vector3(10f, 10f, 27f));
-        Move(roots, "Pickup_TopSW", new Vector3(-10f, 10f, -27f));
+        Move(roots, "Pickup_GndE", new Vector3(35f, 1f, 0f));
+        Move(roots, "Pickup_GndW", new Vector3(-35f, 1f, 0f));
+        Move(roots, "Pickup_TopNE", new Vector3(12f, 12f, 37f));
+        Move(roots, "Pickup_TopSW", new Vector3(-12f, 12f, -37f));
 
-        // Objectives. Rocket on the deck centre — the contested high-middle; flag under it in
-        // the low room; oddball beside the rocket; Flashpoint ring spread across all levels.
-        Move(roots, "RocketSpawn", new Vector3(0f, 7f, 0f));
+        // Objectives. Rocket on the deck centre -- the contested high middle; flag under it in
+        // the low room; oddball beside the rocket; Flashpoint ring across all levels.
+        Move(roots, "RocketSpawn", new Vector3(0f, DeckY + 1f, 0f));
         Move(roots, "FlagSpawn", new Vector3(0f, 1f, 0f));
-        Move(roots, "OddballSpawn", new Vector3(4f, 7f, 0f));
-        Move(roots, "FlashSpawn_1", new Vector3(24f, 1f, 24f));
-        Move(roots, "FlashSpawn_2", new Vector3(-24f, 1f, 24f));
-        Move(roots, "FlashSpawn_3", new Vector3(24f, 1f, -24f));
-        Move(roots, "FlashSpawn_4", new Vector3(-24f, 1f, -24f));
-        Move(roots, "FlashSpawn_5", new Vector3(0f, 10f, 27f));
+        Move(roots, "OddballSpawn", new Vector3(4f, DeckY + 1f, 0f));
+        Move(roots, "FlashSpawn_1", new Vector3(33f, 1f, 33f));
+        Move(roots, "FlashSpawn_2", new Vector3(-33f, 1f, 33f));
+        Move(roots, "FlashSpawn_3", new Vector3(33f, 1f, -33f));
+        Move(roots, "FlashSpawn_4", new Vector3(-33f, 1f, -33f));
+        Move(roots, "FlashSpawn_5", new Vector3(0f, 12f, 37f));
 
-        Move(roots, "Bot1", new Vector3(18f, 1f, -6f));
-        Move(roots, "Bot2", new Vector3(-18f, 1f, 6f));
-        Move(roots, "Bot3", new Vector3(6f, 7f, 6f));
+        Move(roots, "Bot1", new Vector3(24f, 1f, -8f));
+        Move(roots, "Bot2", new Vector3(-24f, 1f, 8f));
+        Move(roots, "Bot3", new Vector3(6f, DeckY + 1f, 6f));
 
         // Connect-screen backdrop: high corner, looking across the deck.
         if (roots.TryGetValue("MenuCamera", out var cam))
         {
-            cam.transform.position = new Vector3(26f, 13f, -26f);
+            cam.transform.position = new Vector3(34f, 17f, -34f);
             cam.transform.rotation = Quaternion.LookRotation(
-                (new Vector3(0f, 4f, 0f) - cam.transform.position).normalized);
+                (new Vector3(0f, 6f, 0f) - cam.transform.position).normalized);
         }
 
         if (roots.TryGetValue("MapBounds", out var mb))
         {
             var bounds = mb.GetComponent<MapBounds>();
-            if (bounds != null) { bounds.killDistance = 36f; bounds.killY = -10f; }
+            if (bounds != null) { bounds.killDistance = 46f; bounds.killY = -10f; }
         }
     }
 
