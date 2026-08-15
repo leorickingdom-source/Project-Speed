@@ -28,6 +28,7 @@ public static class PassiveChoice
         PassiveType.Hookweaver,
         PassiveType.KineticPlating,
         PassiveType.Slipstream,
+        PassiveType.Executioner,
     };
 
     // One line each — enough to pick without reading code.
@@ -48,6 +49,7 @@ public static class PassiveChoice
             case PassiveType.Hookweaver: return "Hooks last 2.6s instead of 1.8, and re-hook twice as fast. Chain swings across gaps that otherwise need the floor.";
             case PassiveType.KineticPlating: return "Your own blasts hurt you half as much; the launch is unchanged. Rocket-jump twice as often for the same health.";
             case PassiveType.Slipstream: return "Air ceiling 18.5 m/s instead of 16.2. Pure travel speed: reach the fight, the pickup or the objective first. No damage bonus.";
+            case PassiveType.Executioner: return "Melee hits for 108 instead of 70 — two taps, or ONE if you arrive above ~27 m/s. Only melee; every gun you carry is unchanged.";
             default: return "";
         }
     }

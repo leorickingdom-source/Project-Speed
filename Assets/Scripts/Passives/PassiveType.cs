@@ -25,4 +25,5 @@ public enum PassiveType
     Hookweaver,    // longer hooks and a faster re-hook (owned by GrappleHook)
     KineticPlating,// your own blasts hurt you less; their shove is untouched (see Explosion)
     Slipstream,    // higher air ceiling — raises flowMax (owned by PlayerMotor)
+    Executioner,   // heavier quick melee, lethal at speed (owned by WeaponController)
 }

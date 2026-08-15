@@ -139,6 +139,15 @@ public class WeaponController : MonoBehaviour
              "with almost anything, which is the point: melee is what you do when shooting is " +
              "not available.")]
     public float quickMeleeCooldown = 0.9f;
+    [Tooltip("Quick-melee damage while the Executioner passive is equipped. 108 rather than " +
+             "70: two taps at any speed, and ONE above about 27 m/s, where Momentum's second " +
+             "tier is nearly maxed. That threshold is the entire design of the pick -- it is " +
+             "only reachable on a rope, a rocket launch or a slung release, so the old knife's " +
+             "instant kill comes back as something you have to ARRIVE for rather than " +
+             "something you spawn with. A full armour plate still survives it (250 effective " +
+             "HP is two taps even at speed), which keeps the counterplay a pickup rather than " +
+             "a coin flip. Guns are untouched: this is the only passive that scales one verb.")]
+    public float executionerMeleeDamage = 108f;
 
     [Header("Tracers")]
     public float tracerTime = 0.04f;
@@ -255,9 +264,28 @@ public class WeaponController : MonoBehaviour
     int preBallIndex;           // weapon to restore when the ball leaves your hands
     MatchManager match; // oddball carrier check; found lazily, null offline
 
+    // Resolved once and again on every loadout change, never asked per swing — the same
+    // pattern PlayerMotor and GrappleHook use, so all three agree about what is equipped and
+    // none of them puts a lookup on a hot path.
+    PassiveLoadout passives;
+    bool hasExecutioner;
+
+    void OnDestroy()
+    {
+        if (passives != null) passives.Changed -= ApplyPassives;
+    }
+
+    void ApplyPassives()
+    {
+        hasExecutioner = passives != null && passives.Has(PassiveType.Executioner);
+    }
+
     void Awake()
     {
         if (input == null) input = GetComponent<InputReader>();
+        passives = GetComponent<PassiveLoadout>();     // optional — absent means no passive
+        if (passives != null) passives.Changed += ApplyPassives;
+        ApplyPassives();
         momentum = GetComponent<MomentumDamage>();     // optional — absent means no speed bonus
         highground = GetComponent<HighgroundDamage>(); // optional — absent means no height bonus
         camper = GetComponent<CamperDamage>();         // optional — absent means no standstill bonus
@@ -704,8 +732,10 @@ public class WeaponController : MonoBehaviour
 
         meleeNextAt = Time.time + quickMeleeCooldown;
         // Momentum-scaled, like the guns: 70 becomes 98 at rope speed, which is what turns a
-        // three-tap into a two-tap for the player who actually arrived fast.
-        Swing(quickMeleeRange, quickMeleeDamage * DamageScale, QuickMeleeTracer, quick: true);
+        // three-tap into a two-tap for the player who actually arrived fast. Executioner moves
+        // the same curve up a rung -- two taps standing still, one above ~27 m/s.
+        float damage = hasExecutioner ? executionerMeleeDamage : quickMeleeDamage;
+        Swing(quickMeleeRange, damage * DamageScale, QuickMeleeTracer, quick: true);
     }
 
     // The weapon-driven melee: the shelved knife, and the oddball you are forced to carry.
