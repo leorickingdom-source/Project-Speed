@@ -193,15 +193,26 @@ public static class VaultMapGenerator
         Move(roots, "SpawnPoint_5", new Vector3(26f, 1f, 26f), faceCenter: true);
         Move(roots, "SpawnPoint_6", new Vector3(-26f, 1f, -26f), faceCenter: true);
 
-        // Pad forces are apex = up^2/2g at gravity 28, aimed a metre or so above the surface
-        // each one serves: 22 -> 8.6m (deck at 8), 25.5 -> 11.6m (balconies at 11), 21 -> 7.9m
-        // (corridor roofs at 7.25).
-        Pad(roots, "Pad_Mid", new Vector3(16f, 0f, -16f), -45f, 22f, 5f);   // onto the deck
-        Pad(roots, "Pad_Mid2", new Vector3(-16f, 0f, 16f), 135f, 22f, 5f);  // opposite corner
-        Pad(roots, "Pad_NE", new Vector3(24f, 0f, 33f), 0f, 25.5f, 3f);     // N balcony
-        Pad(roots, "Pad_NW", new Vector3(-24f, 0f, -33f), 180f, 25.5f, 3f); // S balcony
-        Pad(roots, "Pad_MidNE", new Vector3(34f, 0f, 22f), 180f, 21f, 5f);  // E corridor roof
-        Pad(roots, "Pad_MidSW", new Vector3(-34f, 0f, -22f), 0f, 21f, 5f);  // W corridor roof
+        // Pad launches, SOLVED rather than estimated -- every one of these was flown as a
+        // ballistic arc against the real colliders and checked for a landing that is
+        // descending, on the named surface, on a face with an upward normal.
+        //
+        // The estimate they replace was apex = up^2/2g, which answers "does it go high
+        // enough" and not "does it get there". Every pad cleared its target's HEIGHT and
+        // then hit the UNDERSIDE on the way up, because each sat too close to the platform
+        // it served: the balcony pads clouted Balcony_N at y=10.5, the deck pads sailed past
+        // the deck entirely and landed back on a ramp, and the corridor pads met the roof
+        // slab from below. A pad that hits a ceiling is worse than no pad -- it takes your
+        // momentum and gives back a stall.
+        //
+        // Each entry lands with at least 1.4m of platform margin, so a player who brings
+        // their own speed still arrives on the surface rather than its lip.
+        Pad(roots, "Pad_Mid", new Vector3(16f, 0f, -16f), -45f, 25f, 16f);   // deck centre
+        Pad(roots, "Pad_Mid2", new Vector3(-16f, 0f, 16f), 135f, 25f, 16f);  // deck centre
+        Pad(roots, "Pad_NE", new Vector3(24f, 0f, 28f), 0f, 25f, 7f);        // N balcony, 2.0m in
+        Pad(roots, "Pad_NW", new Vector3(-24f, 0f, -28f), 180f, 25f, 7f);    // S balcony, 2.0m in
+        Pad(roots, "Pad_MidNE", new Vector3(34f, 0f, 24f), 180f, 22f, 8f);   // E corridor roof
+        Pad(roots, "Pad_MidSW", new Vector3(-34f, 0f, -24f), 0f, 22f, 8f);   // W corridor roof
 
         // Pickups: two deep in the corridors (earned by entering the knife-fight lane), two on
         // the balconies (earned by height).
