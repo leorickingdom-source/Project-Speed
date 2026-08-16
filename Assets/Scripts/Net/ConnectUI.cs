@@ -272,19 +272,21 @@ public class ConnectUI : MonoBehaviour
                 GameModeChoice.ModeIndex != GameModeChoice.PureDeathmatch ? selected : button))
             GameModeChoice.ModeIndex = (GameModeChoice.ModeIndex + 1) % GameModeChoice.Count;
 
-        // Bots, host-only in effect like the mode above. Cycles rather than using a row of
-        // buttons because it is one number with four values and the panel has no room left.
-        if (GUI.Button(new Rect(330, 108, 104, 30), BotChoice.Describe(BotChoice.Count),
-                BotChoice.Count > 0 ? selected : button))
-            BotChoice.Count = (BotChoice.Count + 1) % (BotChoice.Max + 1);
-
-        // Difficulty sits next to the count because it is useless without it. Defaults to
-        // Practice: bots exist to be shot at while you test a weapon, and at full strength three
-        // of them kill a full-health player in about four seconds.
-        if (GUI.Button(new Rect(438, 108, 106, 30),
-                BotChoice.DescribeDifficulty(BotChoice.Difficulty),
-                BotChoice.Difficulty > BotChoice.Practice + 0.01f ? selected : button))
-            BotChoice.Difficulty = BotChoice.NextDifficulty(BotChoice.Difficulty);
+        // BOTS SHELVED 2026-08-06: every scene-placed bot was removed from every map, so
+        // these two buttons offered a count and a difficulty for something that cannot spawn.
+        // SimpleBot, BotChoice and MatchManager's synced count are all still standing --
+        // restoring this is putting bots back in the scenes and uncommenting the block below.
+        // They went because they have no PlayerMotor: they cannot use a pad, take a rope or
+        // melee, so every movement feature made them a worse rehearsal for a real opponent.
+        //
+        // if (GUI.Button(new Rect(330, 108, 104, 30), BotChoice.Describe(BotChoice.Count),
+        //         BotChoice.Count > 0 ? selected : button))
+        //     BotChoice.Count = (BotChoice.Count + 1) % (BotChoice.Max + 1);
+        //
+        // if (GUI.Button(new Rect(438, 108, 106, 30),
+        //         BotChoice.DescribeDifficulty(BotChoice.Difficulty),
+        //         BotChoice.Difficulty > BotChoice.Practice + 0.01f ? selected : button))
+        //     BotChoice.Difficulty = BotChoice.NextDifficulty(BotChoice.Difficulty);
 
         // Host = server + local client, the normal way one player hosts for others.
         if (GUI.Button(new Rect(12, 72, 100, 32), hosting ? "Hosting..." : "Host", button)

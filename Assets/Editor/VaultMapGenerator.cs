@@ -232,9 +232,10 @@ public static class VaultMapGenerator
         Move(roots, "FlashSpawn_4", new Vector3(-33f, 1f, -33f));
         Move(roots, "FlashSpawn_5", new Vector3(0f, 12f, 37f));
 
-        Move(roots, "Bot1", new Vector3(24f, 1f, -8f));
-        Move(roots, "Bot2", new Vector3(-24f, 1f, 8f));
-        Move(roots, "Bot3", new Vector3(6f, DeckY + 1f, 6f));
+        // No bots: the scene-placed ones were removed from every map (they have no PlayerMotor,
+        // so they neither use pads nor grapple, and every movement feature made them a worse
+        // representation of a player). SimpleBot and the bot count still exist for the day a
+        // real one is written.
 
         // Connect-screen backdrop: high corner, looking across the deck.
         if (roots.TryGetValue("MenuCamera", out var cam))
