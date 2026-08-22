@@ -384,11 +384,14 @@ public class PlayerBody : MonoBehaviour
         float arm = Mathf.Sin(phase) * armSwing * amp;
 
         // Feed the blend tree, in REAL m/s. The tree's rings ARE the speeds the clips depict —
-        // walk 1.84, run 4.58, sprint 6.83, each measured off its own root motion. The previous
-        // version normalised against fullStrideSpeed (9) instead, which parked the walk clip at
-        // 4 m/s and the sprint clip at 20: every clip ran at two to three times the ground speed
-        // it was authored for, and the whole set skated. Walking looked least wrong only because
-        // its absolute error was smallest.
+        // walk 1.84 and run 4.58, each measured off its own root motion, eight directions apiece
+        // around an idle centre. There is no third ring: 4.58 is the fastest thing in the tree,
+        // which is what topClipSpeed holds and why everything above it is a playback-rate
+        // problem rather than a blend one. The previous version normalised against
+        // fullStrideSpeed (9) instead, which parked the walk clip at 4 m/s and the fastest at
+        // 20: every clip ran at two to three times the ground speed it was authored for, and the
+        // whole set skated. Walking looked least wrong only because its absolute error was
+        // smallest.
         //
         // Damped, because these come off a physics velocity that jitters sub-frame and an
         // undamped tree turns that jitter into visible foot chatter.
@@ -407,7 +410,7 @@ public class PlayerBody : MonoBehaviour
             // Above the fastest clip the tree has nothing left to blend towards, so the surplus
             // goes into PLAYBACK RATE — the only lever that actually keeps stride length near
             // ground speed. Capped, because a grapple reaches 28 m/s and no playback rate makes
-            // a 6.8 m/s cycle read correctly at four times its speed.
+            // a 4.58 m/s cycle read correctly at six times its speed.
             //
             // Grounded locomotion ONLY. The rate exists to match stride length to ground speed,
             // and neither the airborne hold nor the slide has a stride to match: scaling them
@@ -425,8 +428,9 @@ public class PlayerBody : MonoBehaviour
         }
 
         // How much of the pose the PROCEDURAL path owns. The clip set covers every DIRECTION
-        // the motor can move — eight of them at three speeds, plus a jump whose middle section
-        // loops, which is what finally makes unbounded grapple airtime animatable. Backpedal
+        // the motor can move — eight of them, at two speeds standing and one crouched, plus a
+        // jump whose middle section loops, which is what finally makes unbounded grapple airtime
+        // animatable. Backpedal
         // and airborne no longer need the fallback at all.
         //
         // Clips own everything they cover, which is now every state the motor has.
