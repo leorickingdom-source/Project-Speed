@@ -60,6 +60,24 @@ public static class SettingsUI
             GameSettings.FovRange.x, GameSettings.FovRange.y, "0");
         y += 50f;
 
+        // Weapon side. A toggle rather than a slider because there are exactly two answers, and
+        // it sits with the sliders for the same reason Controls does: it is the same question,
+        // "how does this play for me". Which half of the screen the gun covers matters to
+        // anyone who tracks targets on one side of the crosshair.
+        GUI.Label(new Rect(x, y, w * 0.6f, 24f), "Weapon side", label);
+        bool onLeft = GUI.Toggle(new Rect(x + w * 0.6f, y, w * 0.4f, 24f),
+            GameSettings.GunOnLeft, GameSettings.GunOnLeft ? " Left" : " Right", label);
+        bool sideChanged = onLeft != GameSettings.GunOnLeft;
+        if (sideChanged)
+        {
+            GameSettings.GunOnLeft = onLeft;
+            // Pushed to whatever viewmodel exists right now, so the gun moves while the panel is
+            // still open. Waiting for the next spawn would make this feel broken.
+            foreach (var v in Object.FindObjectsByType<WeaponView>(FindObjectsSortMode.None))
+                v.SetGunOnLeft(onLeft);
+        }
+        y += 34f;
+
         // Controls sit next to the sliders rather than in their own menu branch: they are the
         // same question ("how does this play for me"), and a player hunting for sensitivity is
         // the same player who wants to move WASD off a layout that does not have it there.
@@ -78,7 +96,7 @@ public static class SettingsUI
         bool changed = !Mathf.Approximately(s, GameSettings.Sensitivity)
                        || !Mathf.Approximately(vol, GameSettings.Volume)
                        || !Mathf.Approximately(fov, GameSettings.Fov);
-        if (!changed) return nameChanged;
+        if (!changed) return nameChanged || sideChanged;
 
         GameSettings.Sensitivity = s;
         GameSettings.Volume = vol;

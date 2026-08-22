@@ -17,6 +17,7 @@ public static class GameSettings
     const string KeyName = "opt_playername";
     const string KeyAddress = "opt_address";
     const string KeyPort = "opt_port";
+    const string KeyGunSide = "opt_gunside";
 
     // Shipped values, named rather than inlined so Reset cannot drift from the initial state
     // the fields below start at.
@@ -27,6 +28,12 @@ public static class GameSettings
     public static float Sensitivity = DefaultSensitivity;
     public static float Volume = DefaultVolume;
     public static float Fov = DefaultFov;
+
+    // Which side of the screen the weapon sits on. Named for the OUTCOME rather than for the
+    // mirror, because the art itself is not the reference point: the Easy FPS viewmodel renders
+    // at camera-local x = -0.065, i.e. on the left, so "right" is the mirrored case. Defaults to
+    // right, which is where almost every shooter puts it. Read by WeaponView on build.
+    public static bool GunOnLeft;
 
     // Empty means "use the colour name". Not reset by ResetToDefaults — wiping someone's name
     // because they wanted the default FOV back is not what that button says it does.
@@ -64,6 +71,7 @@ public static class GameSettings
         // Stored as int because PlayerPrefs has no ushort; clamped on the way back out so a
         // hand-edited prefs file cannot produce a port the transport will reject.
         Port = (ushort)Mathf.Clamp(PlayerPrefs.GetInt(KeyPort, Port), 1, 65535);
+        GunOnLeft = PlayerPrefs.GetInt(KeyGunSide, GunOnLeft ? 1 : 0) != 0;
         loaded = true;
         Keybinds.Load(); // controls live alongside these; one call site, one place to forget
         Apply();
@@ -82,6 +90,7 @@ public static class GameSettings
         Sensitivity = DefaultSensitivity;
         Volume = DefaultVolume;
         Fov = DefaultFov;
+        GunOnLeft = false;
         Apply();
         Save();
     }
@@ -94,6 +103,7 @@ public static class GameSettings
         PlayerPrefs.SetString(KeyName, PlayerName ?? "");
         PlayerPrefs.SetString(KeyAddress, Address ?? "localhost");
         PlayerPrefs.SetInt(KeyPort, Port);
+        PlayerPrefs.SetInt(KeyGunSide, GunOnLeft ? 1 : 0);
         PlayerPrefs.Save();
     }
 

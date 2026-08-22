@@ -190,6 +190,7 @@ public class WeaponController : MonoBehaviour
         if (lockedIndex == RocketIndex) weapons[RocketIndex].ammo = weapons[RocketIndex].magSize;
         // Start() may not have run yet when this arrives; Start re-applies visibility too.
         if (knifeView != null) knifeView.SetVisible(Current == KnifeIndex);
+        SyncGunView();
     }
 
     // Rocket pickup collected: swap to the rocket with `rockets` in the tube. The locked
@@ -204,6 +205,7 @@ public class WeaponController : MonoBehaviour
         // Even a knife player holds the launcher while it has rockets — it is the one thing
         // that gives that loadout a ranged answer, briefly.
         if (knifeView != null) knifeView.SetVisible(false);
+        SyncGunView();
     }
     public Weapon CurrentWeapon => (weapons != null && Current >= 0 && Current < weapons.Length) ? weapons[Current] : null;
     public string CurrentName => CurrentWeapon != null ? CurrentWeapon.name : "-";
@@ -279,6 +281,7 @@ public class WeaponController : MonoBehaviour
     float reloadDoneAt;
     float reloadStartedAt;
     KnifeView knifeView;        // owner-only viewmodel, built at runtime
+    WeaponView gunView;         // owner-only gun viewmodel (Easy FPS art), built at runtime
     float meleeNextAt;          // quick melee cooldown, independent of the weapon's cycle
     int preBallIndex;           // weapon to restore when the ball leaves your hands
     MatchManager match; // oddball carrier check; found lazily, null offline
@@ -345,6 +348,22 @@ public class WeaponController : MonoBehaviour
         knifeView = gameObject.AddComponent<KnifeView>();
         knifeView.Build(aim);
         knifeView.SetVisible(Current == KnifeIndex);
+
+        gunView = gameObject.AddComponent<WeaponView>();
+        gunView.Build(aim, motor);
+        SyncGunView();
+    }
+
+    // The gun viewmodel follows the same single fact the knife does — what is in hand — so it
+    // is updated wherever KnifeView is. Melee weapons keep KnifeView's primitives: the blade
+    // and the ball have shapes of their own, and the art pack's sword clips are not wired
+    // into its animator controller.
+    void SyncGunView()
+    {
+        if (gunView == null) return;
+        var w = CurrentWeapon;
+        bool melee = w != null && w.kind == FireKind.Melee;
+        gunView.Equip(w != null && w.automatic, !melee);
     }
 
     static Weapon[] DefaultLoadout() => new[]
@@ -609,6 +628,15 @@ public class WeaponController : MonoBehaviour
         // is exactly the moment you most need to see someone arriving.
         Scoped = w != null && w.scopeFov > 0f && !Reloading && Keybinds.Held(GameAction.Scope);
 
+        // Pushed rather than polled by the viewmodel, so there is exactly one place that
+        // decides what "aiming" and "reloading" mean and the hands can never disagree with
+        // the HUD about either.
+        if (gunView != null)
+        {
+            gunView.SetAiming(Scoped);
+            gunView.SetReloading(Reloading, w != null ? w.reloadTime : 0f);
+        }
+
         // Finish an in-progress reload.
         if (w != null && reloadDoneAt > 0f && Time.time >= reloadDoneAt)
         {
@@ -647,6 +675,7 @@ public class WeaponController : MonoBehaviour
                         if (knifeView != null)
                             knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife
                                                                     : KnifeView.Mode.None);
+                        SyncGunView();
                     }
 
                     // Reload starts the INSTANT the mag runs dry, not on the next trigger pull
@@ -676,6 +705,7 @@ public class WeaponController : MonoBehaviour
         {
             reloadStartedAt = Time.time;
             reloadDoneAt = Time.time + w.reloadTime;
+            if (audioFx != null) audioFx.PlayReload();
         }
     }
 
@@ -705,6 +735,7 @@ public class WeaponController : MonoBehaviour
         // it, with nothing on screen — for the rest of that life.
         if (knifeView != null)
             knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife : KnifeView.Mode.None);
+        SyncGunView();
     }
 
     // Force the ball into your hands while you carry it, and give your own weapon back the
@@ -722,12 +753,14 @@ public class WeaponController : MonoBehaviour
             Current = BallIndex;
             reloadDoneAt = 0f;              // whatever was reloading is now on the floor
             if (knifeView != null) knifeView.SetMode(KnifeView.Mode.Ball);
+            SyncGunView();
         }
         else if (!carrying && Current == BallIndex)
         {
             Current = preBallIndex;
             if (knifeView != null)
                 knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife : KnifeView.Mode.None);
+            SyncGunView();
             // Handed back an empty gun — start the reload rather than leaving it idle.
             var back = CurrentWeapon;
             if (back != null && back.magSize > 0 && back.ammo <= 0) StartReload();
@@ -756,6 +789,10 @@ public class WeaponController : MonoBehaviour
         // three-tap into a two-tap for the player who actually arrived fast. Executioner moves
         // the same curve up a rung -- two taps standing still, one above ~27 m/s.
         float damage = hasExecutioner ? executionerMeleeDamage : quickMeleeDamage;
+        // The gun bash animation, so the universal melee is something you can SEE yourself do
+        // with your hands full. KnifeView still borrows the blade underneath — that is what
+        // sells the swing when no gun model is up (the ball, the shelved knife).
+        if (gunView != null) gunView.Melee();
         Swing(quickMeleeRange, damage * DamageScale, QuickMeleeTracer, quick: true, MeleeRadiusNow);
     }
 
@@ -791,13 +828,22 @@ public class WeaponController : MonoBehaviour
         if (net != null && net.IsSpawned) net.ReportFire(MeleeAudioIndex);
         // A quick melee BORROWS the viewmodel for one swing — your hands are meant to be full
         // of gun — where a knife or ball swing is the thing already in them.
-        if (knifeView != null) { if (quick) knifeView.QuickSwing(); else knifeView.Swing(); }
+        //
+        // Skipped entirely while a gun MODEL is up: that has its own bash animation now, and
+        // borrowing the blade on top of it would put a floating knife next to a rifle that is
+        // already swinging. The borrow still happens when there is no gun on screen — the ball,
+        // the shelved knife, or an install with the art pack removed.
+        bool gunOnScreen = gunView != null && gunView.Visible;
+        if (knifeView != null && !gunOnScreen)
+        {
+            if (quick) knifeView.QuickSwing(); else knifeView.Swing();
+        }
         SlashFx(range, tracerColor);
 
         // Sweep rather than a thin ray, and take the first thing that is not us. Uses the
         // same self-exclusion rule as hitscan, since our own capsule sits on the muzzle.
         int n = Physics.SphereCastNonAlloc(aim.position, radius, aim.forward, rayHits,
-            range, hitMask, QueryTriggerInteraction.Ignore);
+            range, HitMask, QueryTriggerInteraction.Ignore);
         float bestDist = float.MaxValue;
         RaycastHit best = default;
         bool found = false;
@@ -851,6 +897,7 @@ public class WeaponController : MonoBehaviour
         {
             if (audioFx != null) audioFx.PlayFire(Current);
             if (net != null && net.IsSpawned) net.ReportFire(Current);
+            if (gunView != null) gunView.Fire();   // muzzle flash + cosmetic kick
         }
 
         if (w.kind == FireKind.Projectile) FireProjectile(w);
@@ -883,9 +930,15 @@ public class WeaponController : MonoBehaviour
                     bool head = Headshot.IsHead(hit.collider, hit.point, headFraction);
                     // Falloff is per-pellet: each shotgun pellet has its own travel distance.
                     float dmg = (head ? w.damage * w.HeadMultiplierOr(headMultiplier) : w.damage)
-                                * scale * w.DamageAtRange(hit.distance);
+                                * scale * w.DamageAtRange(hit.distance)
+                                * Headshot.PartScale(hit.collider);
                     ApplyDamage(hit.collider, hp, dmg, head ? KillKind.Headshot : KillKind.Normal);
                 }
+                // Blood on something alive, a hole on everything else. Local only: a hitscan
+                // hit is resolved on the shooter's client and nowhere else, the same reason
+                // enemy tracers are drawn from their own object rather than replicated.
+                if (hp != null) ImpactFx.Blood(hit.point, hit.normal);
+                else ImpactFx.Hole(hit.point, hit.normal);
             }
             Tracer(origin - aim.up * 0.15f, end, w.tracer);
         }
@@ -912,7 +965,7 @@ public class WeaponController : MonoBehaviour
         proj.headMultiplier = headMultiplier;
         proj.headFraction = headFraction;
         proj.damageScale = DamageScale;  // sampled at launch, like the rocket
-        proj.Launch(aim.forward, w.damage, hitMask, gameObject);
+        proj.Launch(aim.forward, w.damage, HitMask, gameObject);
     }
 
     // Closest hit that isn't part of this player. Needed because the player layer must stay
@@ -921,7 +974,7 @@ public class WeaponController : MonoBehaviour
     bool NearestHitIgnoringSelf(Vector3 origin, Vector3 dir, float range, out RaycastHit best)
     {
         best = default;
-        int n = Physics.RaycastNonAlloc(origin, dir, rayHits, range, hitMask,
+        int n = Physics.RaycastNonAlloc(origin, dir, rayHits, range, HitMask,
             QueryTriggerInteraction.Ignore);
         float bestDist = float.MaxValue;
         bool found = false;
@@ -1037,7 +1090,7 @@ public class WeaponController : MonoBehaviour
         rocket.selfForce = w.selfForce;
         rocket.selfDamageScale = w.selfDamageScale;
         rocket.damageScale = damageScale; // sampled at launch — the shooter's speed when firing
-        rocket.Launch(dir, hitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
+        rocket.Launch(dir, HitMask, gameObject); // travel mask excludes us -> fire at your feet to rocket-jump
     }
 
     // Delegates to the always-active renderer, and tells observers so they see the shot too.
