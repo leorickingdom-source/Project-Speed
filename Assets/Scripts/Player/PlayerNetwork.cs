@@ -77,7 +77,10 @@ public class PlayerNetwork : TickNetworkBehaviour
     // not see your own. Set showOwnBody on the component to look at it without a second client.
     void Start()
     {
-        if (IsSpawned) return;               // networked — OnStartClient owns this
+        // Asked through NetworkObject rather than IsSpawned: IsSpawned dereferences a cache
+        // FishNet only fills in during initialization, so on the very object this guard exists
+        // to catch — a scene-placed player that never spawned — reading it throws.
+        if (NetworkObject != null && NetworkObject.IsSpawned) return;
         var body = transform.Find("Body");
         var rend = body != null ? body.GetComponent<Renderer>() : null;
         var humanoid = PlayerBody.Attach(transform, PlayerColors.For(0), showOwnBody, hitboxes: false);
