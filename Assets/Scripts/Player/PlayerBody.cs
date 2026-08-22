@@ -351,9 +351,19 @@ public class PlayerBody : MonoBehaviour
         // drives the strafe lean. Both come off the replicated motor state, so a remote player
         // leans and strides correctly without a single extra byte on the wire.
         Vector3 local = model.InverseTransformDirection(new Vector3(motor.velocity.x, 0f, motor.velocity.z));
-        // Crouch is read off the CAPSULE rather than a flag, so the visual stance can never
-        // disagree with the collider a shot is tested against — including mid-transition,
-        // where the capsule is between heights and so is the body.
+        // Crouch is read off the CAPSULE rather than a flag, so the visual stance follows the
+        // collider rather than an input that may not have moved it yet.
+        //
+        // It follows it, but it does not track it exactly: the animator damps `crouch` below,
+        // so the pose trails the capsule on the way down. Measured, the capsule reaches crouch
+        // height in about 0.11s and the body finishes arriving around 0.4s, which leaves a
+        // window where the collider is fully crouched and the body is only half way there.
+        //
+        // That window costs nothing, and it is worth being clear about WHY: the hitboxes are
+        // parented to this skeleton, not to the capsule, so they lag with the body and what
+        // you see stays what you hit. The capsule is the MOVEMENT shape. Only a shot tested
+        // against the capsule would notice the disagreement, and since the rig went in,
+        // nothing tests against it — see WeaponController.HitMask.
         float stance = Mathf.Clamp01((motor.height - motor.crouchHeight)
                                      / Mathf.Max(0.01f, motor.standHeight - motor.crouchHeight));
         float crouch = 1f - stance;
