@@ -226,20 +226,18 @@ public class MatchManager : NetworkBehaviour
         ballSpawnResolved = false;
         rocketSpawnResolved = false;
         flashAnchorsResolved = false;
-        // NetPresence FIRST, then IsSpawned, then IsServerStarted — each guard covers a
-        // failure the next one cannot.
+        // Asked through NetworkObject, because IsSpawned is not the safe question it looks
+        // like: it dereferences a cache FishNet fills in when it initialises THIS behaviour,
+        // and this callback runs during the scene load, before that has happened.
         //
-        // IsSpawned before IsServerStarted: this callback fires during the scene load, which
-        // on a client joining mid-flight happens before FishNet has initialised this
-        // behaviour, and IsServerStarted dereferences the NetworkManager cache that
-        // initialisation sets.
+        // A NetworkManager existing in the scene is not the same precondition and does not
+        // stand in for it — guarding on that alone still threw here on every load of a map
+        // that has one. NetworkObject returns the same field without dereferencing it, which
+        // also covers the no-NetworkManager case the old guard was reaching for.
         //
-        // HasNetworkManager before BOTH: IsSpawned is not the safe question it looks like.
-        // Press Play with a MAP scene open instead of the boot scene and there is no
-        // NetworkManager anywhere, so IsSpawned itself throws inside FishNet — an NRE per
-        // scene load, from the guard that was supposed to prevent one. Costs nothing in a
-        // real match, where the manager always exists by the time a map loads.
-        if (NetPresence.HasNetworkManager && IsSpawned && IsServerStarted)
+        // IsServerStarted stays last: it reads a cache the same initialisation sets, so it is
+        // only safe once the check before it has passed.
+        if (NetworkObject != null && NetworkObject.IsSpawned && IsServerStarted)
         {
             ResetOddball();
             ResetFlashpoint();
