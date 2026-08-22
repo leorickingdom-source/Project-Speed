@@ -1399,7 +1399,6 @@ GameObject:
   - component: {fileID: 872845790}
   - component: {fileID: 872845789}
   - component: {fileID: 872845788}
-  - component: {fileID: 872845787}
   m_Layer: 0
   m_Name: Powerup_Grapple
   m_TagString: Untagged
@@ -1407,28 +1406,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &872845787
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 872845786}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 72372ee21a79f984ea07fedeeb0e9acc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PowerupPickup
-  type: 0
-  duration: 25
-  respawnCooldown: 20
-  playerMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  visual: {fileID: 0}
-  spinSpeed: 90
-  bobHeight: 0.35
-  bobSpeed: 2
 --- !u!23 &872845788
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -2729,7 +2706,6 @@ GameObject:
   - component: {fileID: 1486045623}
   - component: {fileID: 1486045622}
   - component: {fileID: 1486045624}
-  - component: {fileID: 1486045625}
   - component: {fileID: 1486045626}
   - component: {fileID: 1486045628}
   - component: {fileID: 1486045627}
@@ -3135,18 +3111,6 @@ MonoBehaviour:
   meleeRadiusFullSpeed: 27
   meleeRadiusRampStart: 12
   tracerTime: 0.04
---- !u!114 &1486045625
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1486045613}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ed64b391defd7eb4888484a6250afbce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PowerupReceiver
 --- !u!114 &1486045626
 MonoBehaviour:
   m_ObjectHideFlags: 0
