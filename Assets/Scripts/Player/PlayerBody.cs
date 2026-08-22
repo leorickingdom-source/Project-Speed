@@ -422,8 +422,11 @@ public class PlayerBody : MonoBehaviour
         // Clips own everything they cover, which is now every state the motor has.
         //
         // They used to hand crouch and slide back to the procedural pose, because a Mixamo
-        // crouch stands 1.38m and its slide 1.68m against a 1.0m crouch capsule — and a visible
-        // torso outside the collider is a torso that cannot be shot. That reason is gone: the
+        // crouch stands 1.14-1.27m and its slide 1.28-1.62m against a 1.0m crouch capsule — and
+        // a visible torso outside the collider is a torso that cannot be shot. Ranges, not
+        // figures: the pose travels while the clip plays, so a slide is 60cm clear of the
+        // capsule as it goes down and half that by the time it runs out. Measured crown-to-floor
+        // on a grounded player, held for 200+ frames per stance. That reason is gone: the
         // hitboxes are bolted to this skeleton now, so they crouch and lie down WITH it and the
         // visual cannot disagree with what a bullet tests. The handoff was buying a lie that no
         // longer exists, at the price of the procedural slide, which read as a melted crouch.

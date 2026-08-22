@@ -10,8 +10,9 @@ using UnityEngine;
 //
 // That also retires a class of bug this project kept running into. The band was a FRACTION of
 // a capsule that changes height, so it moved when you crouched, and it did not move the same
-// way the visible body did — the crouch clips stood 38cm outside it, the slide 68cm. A hitbox
-// bolted to the skull cannot disagree with the skull.
+// way the visible body did — a crouching crown cleared the whole 1m capsule by 14-27cm and a
+// sliding one by 28-62cm, so the head you aimed at was not inside the collider being tested.
+// A hitbox bolted to the skull cannot disagree with the skull.
 public class Hitbox : MonoBehaviour
 {
     public enum Part { Head, Torso, Pelvis, Arm, Leg }

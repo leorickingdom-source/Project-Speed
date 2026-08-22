@@ -16,8 +16,9 @@ public static class Headshot
     //
     // The geometric rule is also why the rig version is worth having. A fraction of a capsule
     // that changes height moves when you crouch, and it never moved the way the visible body
-    // did: measured against the crouch clips the visible head sat 38cm outside the band, and
-    // during a slide 68cm. A box bolted to the skull cannot disagree with the skull.
+    // did: measured against the clips, a crouching player's crown stood 14-27cm above the whole
+    // 1m capsule, and a sliding one 28-62cm — not merely outside the band, outside the collider,
+    // so the head could not be hit at all. A box bolted to the skull cannot disagree with it.
     public static bool IsHead(Collider target, Vector3 point, float fraction)
     {
         var hb = target.GetComponent<Hitbox>();
