@@ -80,6 +80,11 @@ public class KillFeed : NetworkBehaviour
     {
         if (victim == null) return;
 
+        // Same choke point the feed uses, for the same reason: this runs on EVERY client, for
+        // both the offline path and the broadcast one, so the replay recorder sees every kill
+        // without a second message carrying the same fact.
+        if (killer != null) MatchRecorder.RecordKill(killer.transform, kind);
+
         entries.Add(new Entry
         {
             killer = killer != null ? NameOf(killer) : null,
