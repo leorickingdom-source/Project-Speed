@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 // Wires the recorder and the player to the match, and is the only thing either of them knows
 // about the game being over.
@@ -21,6 +22,35 @@ public class PlayOfTheGame : MonoBehaviour
     MatchManager match;
     bool fired;
     float playAt = -1f;
+
+    // This one cannot wait to be created on demand the way MatchRecorder and ReplayPlayer do,
+    // because it has no call site to be pulled in from: it is the thing that WATCHES for the
+    // match ending, so it has to exist before anything asks for it. Nothing in any scene
+    // references it and nothing should have to.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void Bootstrap()
+    {
+        Ensure();
+        // Fires once per play session, not once per scene, so map changes are picked up here.
+        // Re-ensured per scene rather than made DontDestroyOnLoad because a replay belongs to
+        // one match — last map is exactly what should NOT survive into the next one. The -=
+        // first is for domain reload being off, where a stale subscription would otherwise
+        // stack up another handler on every entry into play mode.
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    static void OnSceneLoaded(Scene s, LoadSceneMode mode)
+    {
+        if (mode == LoadSceneMode.Single) Ensure();
+    }
+
+    public static PlayOfTheGame Ensure()
+    {
+        var found = FindAnyObjectByType<PlayOfTheGame>();
+        if (found != null) return found;
+        return new GameObject("PlayOfTheGame").AddComponent<PlayOfTheGame>();
+    }
 
     // Both halves are created on demand — no scene has to remember to place them, the pattern
     // ImpactFx and the head caps already use.
