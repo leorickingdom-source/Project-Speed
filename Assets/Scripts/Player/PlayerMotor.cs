@@ -1018,6 +1018,12 @@ public class PlayerMotor : MonoBehaviour
         foreach (var other in overlaps)
         {
             if (other == col) continue;
+            // Anything else hanging off this player is ours too, and pushing away from our own
+            // body is a self-propelling engine. Skipping only `col` was enough while the capsule
+            // was the sole collider we owned; the animated hitboxes are children of the body
+            // model, so the first frame they switched on the motor started shoving itself
+            // sideways out of its own arms — a player drifting back-left with no input.
+            if (other.transform.root == transform.root) continue;
             if (Physics.ComputePenetration(col, pos, transform.rotation,
                     other, other.transform.position, other.transform.rotation,
                     out Vector3 dir, out float depth))

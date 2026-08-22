@@ -97,7 +97,21 @@ public class WeaponController : MonoBehaviour
     public Transform aim;
 
     [Header("Masks")]
-    public LayerMask hitMask = ~0;      // player layer removed at runtime
+    public LayerMask hitMask = ~0;      // corpse layer removed at runtime
+
+    // What shots actually test against. The player CAPSULE (layer 8) drops out the moment any
+    // body in the scene is carrying hitboxes along its skeleton — left in, it would win every
+    // shot, because it encloses the whole body and the ray reaches it before it reaches an arm
+    // or a head, which would make the rig pure decoration.
+    //
+    // Resolved per shot rather than once in Awake, because the bodies that own those hitboxes
+    // are built when players SPAWN, long after this component wakes. Reading it live also means
+    // turning PlayerBody.rigHitboxes off restores the capsule with no other edit.
+    //
+    // NOTE: this removes everything else on layer 8 from hitscan as well. Bots are scene
+    // objects and are currently absent from every map; if they return they need their own
+    // hitbox collider, or a layer that is not the player's.
+    public int HitMask => PlayerBody.RigHitboxesInUse ? hitMask & ~(1 << 8) : hitMask.value;
 
     [Header("Loadout")]
     public Weapon[] weapons;            // auto-filled with the default 5 if left empty

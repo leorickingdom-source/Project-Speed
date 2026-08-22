@@ -68,6 +68,29 @@ public class PlayerNetwork : TickNetworkBehaviour
         SetTickCallbacks(TickCallback.Tick | TickCallback.PostTick);
     }
 
+    // OFFLINE path. OnStartClient only fires for a spawned network object, so a player dropped
+    // straight into a scene — which is how SampleScene is set up and how most editor testing
+    // actually happens — never built a body at all. Everything visual about a player lived
+    // behind a connection.
+    //
+    // Hidden by default for the same reason as the networked path: it is YOUR body, and you do
+    // not see your own. Set showOwnBody on the component to look at it without a second client.
+    void Start()
+    {
+        if (IsSpawned) return;               // networked — OnStartClient owns this
+        var body = transform.Find("Body");
+        var rend = body != null ? body.GetComponent<Renderer>() : null;
+        var humanoid = PlayerBody.Attach(transform, PlayerColors.For(0), showOwnBody, hitboxes: false);
+        if (humanoid != null && rend != null) rend.enabled = false;
+        if (humanoid != null && GetComponent<ThirdPersonView>() == null)
+            gameObject.AddComponent<ThirdPersonView>();
+    }
+
+    [Tooltip("Offline testing only: render your OWN humanoid. You are inside it, so expect to " +
+             "see it from within — enough to confirm the model loads, tints and animates " +
+             "without standing up a second client.")]
+    public bool showOwnBody;
+
     // Hand the sim over to the network tick only once networking is actually running, and
     // give it back on stop — so the scene still plays offline off FixedUpdate.
     public override void OnStartNetwork()
@@ -98,23 +121,49 @@ public class PlayerNetwork : TickNetworkBehaviour
             var rend = body.GetComponent<Renderer>();
             if (rend != null)
             {
-                rend.enabled = !IsOwner;
                 // Colour by OwnerId, which FishNet assigns and syncs — so every client derives
                 // the same colour for the same player with no extra networking.
                 var c = PlayerColors.For(OwnerId);
+                // Tinted even when the capsule is never drawn: CorpseFx copies its material to
+                // colour the body that falls over, so leaving it untinted would make every
+                // corpse the wrong player.
                 var m = rend.material;              // instance, per player
                 if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
                 m.color = c;
 
-                // Dark cap over the headshot band, so "aim for the head" is a place you can
-                // SEE rather than a rule you memorise. Sized from the same headFraction the
-                // damage code uses — if the band is retuned, the paint moves with it.
-                if (!IsOwner) AddHeadCap(body, c);
+                // The humanoid replaces the capsule as the VISUAL only. The capsule collider
+                // stays exactly where it was, so hitscan, the headshot band and the crouch
+                // stance all still test against the shape PlayerMotor has always driven.
+                var humanoid = PlayerBody.Attach(transform, c, !IsOwner, hitboxes: !IsOwner);
+                if (humanoid != null)
+                {
+                    // No head cap on a humanoid. The cap is sized from the capsule's bounds —
+                    // a 1m-wide disc — which read as a head zone on a featureless pill and
+                    // reads as nothing on a body that already has a head. The band itself is
+                    // unchanged: measured against this rig it runs from the shoulder line up,
+                    // which is what a player expects "headshot" to mean anyway.
+                    rend.enabled = false;
+                }
+                else
+                {
+                    // Art pack not installed — the capsule is still the body, exactly as before.
+                    rend.enabled = !IsOwner;
+                    // Dark cap over the headshot band, so "aim for the head" is a place you can
+                    // SEE rather than a rule you memorise. Sized from the same headFraction the
+                    // damage code uses — if the band is retuned, the paint moves with it.
+                    if (!IsOwner) AddHeadCap(body, c);
+                }
             }
         }
 
         if (IsOwner)
         {
+            // F9 pulls the camera back so you can watch your own animation. Owner-only, and a
+            // view change only — see ThirdPersonView for why shots still leave the eye. Gated
+            // on the body existing, since there would be nothing behind you to look at.
+            if (GetComponent<PlayerBody>() != null && GetComponent<ThirdPersonView>() == null)
+                gameObject.AddComponent<ThirdPersonView>();
+
             // Apply the weapon picked on the connect screen. Owner-only: it's a local choice,
             // and remote players never render your tracers anyway.
             var wc = GetComponent<WeaponController>();
