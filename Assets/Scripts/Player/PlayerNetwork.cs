@@ -80,7 +80,7 @@ public class PlayerNetwork : TickNetworkBehaviour
         // Asked through NetworkObject rather than IsSpawned: IsSpawned dereferences a cache
         // FishNet only fills in during initialization, so on the very object this guard exists
         // to catch — a scene-placed player that never spawned — reading it throws.
-        if (NetworkObject != null && NetworkObject.IsSpawned) return;
+        if (NetPresence.IsSpawned(this)) return;
         var body = transform.Find("Body");
         var rend = body != null ? body.GetComponent<Renderer>() : null;
         var humanoid = PlayerBody.Attach(transform, PlayerColors.For(0), showOwnBody, hitboxes: false);

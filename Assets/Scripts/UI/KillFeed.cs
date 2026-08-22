@@ -60,7 +60,7 @@ public class KillFeed : NetworkBehaviour
 
         // Offline there is nobody to broadcast to, so the local list is the whole feed. This is
         // what makes the feed work in single-player practice against bots.
-        if (!instance.IsSpawned || !instance.IsServerStarted)
+        if (!NetPresence.IsSpawned(instance) || !NetPresence.IsServerStarted)
         {
             instance.AddLocal(killer, victim, kind);
             return;

@@ -237,7 +237,7 @@ public class MatchManager : NetworkBehaviour
         //
         // IsServerStarted stays last: it reads a cache the same initialisation sets, so it is
         // only safe once the check before it has passed.
-        if (NetworkObject != null && NetworkObject.IsSpawned && IsServerStarted)
+        if (NetPresence.IsSpawned(this) && IsServerStarted)
         {
             ResetOddball();
             ResetFlashpoint();

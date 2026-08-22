@@ -1,4 +1,5 @@
 using FishNet.Managing;
+using FishNet.Object;
 using UnityEngine;
 
 // Silent, rate-limited access to the NetworkManager for code that runs every frame.
@@ -53,4 +54,20 @@ public static class NetPresence
     }
 
     public static bool IsRunning => IsClientStarted || IsServerStarted;
+
+    // The safe form of NetworkBehaviour.IsSpawned, and the reason this class grew a
+    // per-behaviour question at all.
+    //
+    // IsSpawned dereferences a NetworkObject cache FishNet fills in only when it initialises
+    // THAT behaviour. Ask before it has — a scene object during scene load, a prefab between
+    // Instantiate and Spawn — and it throws inside FishNet instead of answering false. So does
+    // IsServerStarted, which reads a cache the same initialisation sets; use the parameterless
+    // IsServerStarted above for that, since it goes through the manager rather than the
+    // behaviour.
+    //
+    // Three call sites were fixed for this one at a time before it was worth naming:
+    // PlayerNetwork.Start, MatchManager.OnSceneLoaded and KillFeed.Announce. NetworkObject
+    // returns the same field without dereferencing it, which is the whole fix.
+    public static bool IsSpawned(NetworkBehaviour nb) =>
+        nb != null && nb.NetworkObject != null && nb.NetworkObject.IsSpawned;
 }
