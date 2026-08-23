@@ -1,6 +1,10 @@
 using UnityEngine;
 
-// Cosmetic corpse: a tinted capsule that takes the dead player's place and falls over.
+// Cosmetic corpse: the dead player's body drops where they died.
+//
+// A RAGDOLL when the player has a humanoid, a tinted capsule when they do not. The capsule is
+// not legacy — it is what a player without the art pack still gets, the same fallback PlayerBody
+// and Headshot keep, so death reads correctly with or without the models installed.
 //
 // Before this, death looked like nothing — the body froze standing upright until the respawn
 // teleport, so from across the arena a kill was indistinguishable from someone standing still.
@@ -24,8 +28,14 @@ public static class CorpseFx
     // the swap reads as the same player keeling over, not a prop appearing. `awayFrom` is the
     // killer's position when known; the corpse falls away from the shot, which is the one
     // detail that makes the physics read as caused rather than random.
-    public static void Spawn(Transform body, Vector3? awayFrom)
+    public static void Spawn(Transform body, Vector3? awayFrom, PlayerBody rig = null)
     {
+        // Ragdoll first. It needs the humanoid, so it declines on its own when the pack is
+        // missing or the avatar is generic, and the capsule below picks the death up instead.
+        if (rig != null && rig.Model != null
+            && Ragdoll.Spawn(rig, rig.Model, awayFrom, TipImpulse, SpinImpulse, Lifetime) != null)
+            return;
+
         if (body == null) return;
 
         var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);

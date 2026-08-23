@@ -37,6 +37,15 @@ public class PlayerBody : MonoBehaviour
     // player: the moment rigs exist, shooting a capsule would beat shooting a head.
     public static bool RigHitboxesInUse { get; private set; }
 
+    [Header("Size")]
+    [Tooltip("Uniform scale on the model. The X Bot mannequin stands 1.73m crown-to-floor at " +
+             "1, inside a 2m movement capsule, which is what made it read as a small figure " +
+             "in a big arena: the world is built around the capsule, not the art. 1.15 fills " +
+             "the capsule, so the body you see is the height the level was measured for. " +
+             "Scales the hitboxes with it, which is the point — they hang off these bones, so " +
+             "a bigger body is a bigger target and the two cannot drift apart.")]
+    public float modelScale = 1.15f;
+
     [Header("Hitboxes")]
     [Tooltip("Build colliders along the skeleton so shots are tested against the body you can " +
              "actually see, instead of a capsule that ignores what the body is doing. Off " +
@@ -144,6 +153,10 @@ public class PlayerBody : MonoBehaviour
 
     PlayerMotor motor;
     Transform model;
+
+    // Read-only on purpose: CorpseFx needs to clone the body to make a ragdoll of it, and
+    // nothing outside has any business reparenting or replacing the live one.
+    public Transform Model => model;
     Animator animator;          // null / no controller = pure procedural, exactly as before
     float blend = 1f;           // 1 = procedural owns the pose, 0 = the clips do
     float phase;                // stride phase in radians, advanced by distance
@@ -179,6 +192,8 @@ public class PlayerBody : MonoBehaviour
         go.transform.localRotation = Quaternion.identity;
 
         var pb = playerRoot.gameObject.AddComponent<PlayerBody>();
+        // Before Bind, so the hitboxes measure bone spans at the scale they will be seen at.
+        go.transform.localScale = Vector3.one * pb.modelScale;
         pb.rigHitboxes &= hitboxes;
         pb.model = go.transform;
         pb.motor = playerRoot.GetComponent<PlayerMotor>();
@@ -238,7 +253,11 @@ public class PlayerBody : MonoBehaviour
         var tb = anim.GetBoneTransform(b);
         if (ta == null || tb == null) return;
 
-        float len = Vector3.Distance(ta.position, tb.position);
+        // LOCAL length, not world. The collider is parented to the bone and so inherits its
+        // scale, while height and center are read in local units — measuring the span in world
+        // metres would then be scaled a second time on the way out, which put every capsule
+        // modelScale-times too long the moment the body stopped being built at 1.
+        float len = ta.InverseTransformPoint(tb.position).magnitude;
         if (len < 0.01f) return;                       // degenerate bone pair; skip rather than
                                                        // leave a zero-height collider behind
         var go = NewBox(ta, part);
@@ -440,7 +459,8 @@ public class PlayerBody : MonoBehaviour
         // a visible torso outside the collider is a torso that cannot be shot. Ranges, not
         // figures: the pose travels while the clip plays, so a slide is 60cm clear of the
         // capsule as it goes down and half that by the time it runs out. Measured crown-to-floor
-        // on a grounded player, held for 200+ frames per stance. That reason is gone: the
+        // on a grounded player, held for 200+ frames per stance, at modelScale 1 — they all
+        // grow with it, so read them as proportions of the capsule rather than fixed metres. That reason is gone: the
         // hitboxes are bolted to this skeleton now, so they crouch and lie down WITH it and the
         // visual cannot disagree with what a bullet tests. The handoff was buying a lie that no
         // longer exists, at the price of the procedural slide, which read as a melted crouch.
