@@ -839,7 +839,7 @@ public class WeaponController : MonoBehaviour
         // ARE the counterplay cue: hearing or seeing one behind you is what lets you turn
         // around, and a silent invisible whiff would make the approach free.
         if (audioFx != null) audioFx.PlayMelee();
-        if (net != null && net.IsSpawned) net.ReportFire(MeleeAudioIndex);
+        if (NetPresence.IsSpawned(net)) net.ReportFire(MeleeAudioIndex);
         // A quick melee BORROWS the viewmodel for one swing — your hands are meant to be full
         // of gun — where a knife or ball swing is the thing already in them.
         //
@@ -910,7 +910,7 @@ public class WeaponController : MonoBehaviour
         if (w.kind != FireKind.Melee)
         {
             if (audioFx != null) audioFx.PlayFire(Current);
-            if (net != null && net.IsSpawned) net.ReportFire(Current);
+            if (NetPresence.IsSpawned(net)) net.ReportFire(Current);
             if (gunView != null) gunView.Fire();   // muzzle flash + cosmetic kick
         }
 
@@ -1014,7 +1014,7 @@ public class WeaponController : MonoBehaviour
         if (feedback != null) feedback.ShowHit(kind);
 
         var nob = victim.GetComponentInParent<FishNet.Object.NetworkObject>();
-        if (net != null && net.IsSpawned && nob != null) net.ReportHit(nob, damage, kind);
+        if (NetPresence.IsSpawned(net) && nob != null) net.ReportHit(nob, damage, kind);
         else hp.Damage(damage);
     }
 
@@ -1043,7 +1043,7 @@ public class WeaponController : MonoBehaviour
         SpawnRocket(origin, dir, Current, DamageScale);
         // The CONVERGED direction, not aim.forward — the server's rocket must fly the same
         // line as the one the shooter is watching, or the visual hits and the real one misses.
-        if (net != null && net.IsSpawned && !net.IsServerStarted)
+        if (NetPresence.IsSpawned(net) && !net.IsServerStarted)
             net.ReportRocket(origin, dir, Current, DamageScale);
     }
 
@@ -1111,7 +1111,7 @@ public class WeaponController : MonoBehaviour
     void Tracer(Vector3 a, Vector3 b, Color col)
     {
         if (tracers != null) tracers.Show(a, b, col, tracerTime);
-        if (net != null && net.IsSpawned) net.ReportTracer(a, b);
+        if (NetPresence.IsSpawned(net)) net.ReportTracer(a, b);
     }
 
 }

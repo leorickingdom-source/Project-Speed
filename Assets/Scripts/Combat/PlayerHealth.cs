@@ -75,7 +75,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public bool Invulnerable => Time.time < invulnUntil;
 
     // Who may mutate health: the server when networked, ourselves when running offline.
-    bool HasAuthority => !IsSpawned || IsServerStarted;
+    // Through NetPresence: IsSpawned, IsServerStarted and IsOwner all dereference a cache
+    // FishNet only fills in when it initialises this behaviour, so each of them throws
+    // rather than answering while it has not. Short-circuit keeps IsServerStarted behind
+    // the guard, where it is safe to ask.
+    bool HasAuthority => !NetPresence.IsSpawned(this) || IsServerStarted;
 
     // Effective ceiling = base + passives. Everything that clamps or refills reads THIS,
     // never the raw maxHp field, so equipping Vitality can't leave you capped at the base.

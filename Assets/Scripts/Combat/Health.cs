@@ -21,7 +21,11 @@ public class Health : NetworkBehaviour, IDamageable
     public float Hp => hp.Value;
     public bool Alive => hp.Value > 0f;
 
-    bool HasAuthority => !IsSpawned || IsServerStarted;
+    // Through NetPresence: IsSpawned, IsServerStarted and IsOwner all dereference a cache
+    // FishNet only fills in when it initialises this behaviour, so each of them throws
+    // rather than answering while it has not. Short-circuit keeps IsServerStarted behind
+    // the guard, where it is safe to ask.
+    bool HasAuthority => !NetPresence.IsSpawned(this) || IsServerStarted;
 
     Collider col;
     float reviveAt;

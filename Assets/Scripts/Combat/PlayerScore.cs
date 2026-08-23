@@ -58,35 +58,35 @@ public class PlayerScore : NetworkBehaviour
     // (death), both of which already run under server authority.
     public void AddKill()
     {
-        if (IsServerStarted) kills.Value++;
+        if (NetPresence.IsServerStarted) kills.Value++;
     }
 
     public void AddDeath()
     {
-        if (IsServerStarted) deaths.Value++;
+        if (NetPresence.IsServerStarted) deaths.Value++;
     }
 
     // Called by MatchManager: once a second while holding, and in a lump for a carrier kill.
     public void AddOddballPoints(int amount)
     {
-        if (IsServerStarted && amount > 0) oddballPoints.Value += amount;
+        if (NetPresence.IsServerStarted && amount > 0) oddballPoints.Value += amount;
     }
 
     // Called by MatchManager once per second while this player holds the flashpoint.
     public void AddFlashpoint(int amount)
     {
-        if (IsServerStarted && amount > 0) flashpoints.Value += amount;
+        if (NetPresence.IsServerStarted && amount > 0) flashpoints.Value += amount;
     }
 
     public void AddFlagCapture()
     {
-        if (IsServerStarted) flagCaptures.Value++;
+        if (NetPresence.IsServerStarted) flagCaptures.Value++;
     }
 
     // Called by MatchManager between rounds.
     public void ResetScore()
     {
-        if (!IsServerStarted) return;
+        if (!NetPresence.IsServerStarted) return;
         kills.Value = 0;
         deaths.Value = 0;
         oddballPoints.Value = 0;
@@ -97,7 +97,10 @@ public class PlayerScore : NetworkBehaviour
     void OnGUI()
     {
         // Only the local player draws it, or every player in the scene would stack a copy.
-        if (!showScoreboard || !IsOwner || GameMenu.IsPaused || KeybindsUI.Open) return;
+        // Spawn checked before IsOwner, which reads the same cache and throws while it is
+        // unset — and this runs from OnGUI, so that is once per GUI pass, not once.
+        if (!showScoreboard || !NetPresence.IsSpawned(this) || !IsOwner
+            || GameMenu.IsPaused || KeybindsUI.Open) return;
 
         // Hold-to-view (Tab), the FPS convention. Always-on it was furniture — permanently
         // covering a corner to answer a question the player asks a few times a match.
@@ -161,7 +164,7 @@ public class PlayerScore : NetworkBehaviour
 
             // Your own row is backlit rather than prefixed — findable at a glance without
             // parsing text.
-            if (p.IsOwner)
+            if (NetPresence.IsSpawned(p) && p.IsOwner)
             {
                 GUI.color = new Color(1f, 0.9f, 0.4f, 0.12f);
                 GUI.DrawTexture(new Rect(x + 6f, ry - 2f, w - 12f, 28f), Texture2D.whiteTexture);
@@ -169,7 +172,7 @@ public class PlayerScore : NetworkBehaviour
             }
 
             // Row is drawn in that player's own colour, so the scoreboard and the arena agree.
-            var row = new GUIStyle(p.IsOwner ? mine : style);
+            var row = new GUIStyle(NetPresence.IsSpawned(p) && p.IsOwner ? mine : style);
             row.normal.textColor = p.Tint;
             GUI.Label(new Rect(x + 20f, ry, w * 0.5f, 26f), $"{i + 1}.  {p.Label}", row);
             if (objHeader != null)

@@ -51,7 +51,11 @@ public class SimpleBot : NetworkBehaviour
     float nextRetarget;
     bool live = true;
 
-    bool HasAuthority => !IsSpawned || IsServerStarted;
+    // Through NetPresence: IsSpawned, IsServerStarted and IsOwner all dereference a cache
+    // FishNet only fills in when it initialises this behaviour, so each of them throws
+    // rather than answering while it has not. Short-circuit keeps IsServerStarted behind
+    // the guard, where it is safe to ask.
+    bool HasAuthority => !NetPresence.IsSpawned(this) || IsServerStarted;
 
     void Awake()
     {
@@ -155,7 +159,7 @@ public class SimpleBot : NetworkBehaviour
                 // Slower cadence at lower difficulty, so the gap between shots is a real window.
                 nextFire = Time.time + fireCooldown / diff;
 
-                if (IsSpawned) BroadcastShot(muzzle, dir);
+                if (NetPresence.IsSpawned(this)) BroadcastShot(muzzle, dir);
                 else FireProjectile(muzzle, dir);
             }
         }

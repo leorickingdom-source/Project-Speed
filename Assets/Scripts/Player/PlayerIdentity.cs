@@ -42,7 +42,9 @@ public class PlayerIdentity : NetworkBehaviour
     // notification would be a third thing to keep in sync, and this is one string compare.
     void Update()
     {
-        if (!IsOwner || !IsSpawned) return;
+        // Spawn FIRST. IsOwner reads the same uninitialised cache, so asking it before the
+        // guard threw on exactly the object the guard existed to skip.
+        if (!NetPresence.IsSpawned(this) || !IsOwner) return;
         if (GameSettings.PlayerName == submitted) return;
         Submit();
     }

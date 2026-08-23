@@ -189,6 +189,12 @@ public class MatchManager : NetworkBehaviour
     public bool FlashpointMode => gameMode.Value == GameModeChoice.Flashpoint;
 
     public bool MatchOver => winnerId.Value != InProgress;
+
+    // "Is this player mine?", asked of somebody else's PlayerNetwork. IsOwner reads a cache
+    // FishNet sets when it initialises that behaviour, so a player caught between Instantiate
+    // and Spawn answers by throwing. Every caller here is walking a list of players and has no
+    // say in how far along any of them is.
+    static bool OwnedLocally(PlayerNetwork net) => NetPresence.IsSpawned(net) && net.IsOwner;
     public bool PickupsEnabled => gameMode.Value != GameModeChoice.PureDeathmatch;
     public bool OddballMode => gameMode.Value == GameModeChoice.Oddball;
     public int BotCount => botCount.Value;
@@ -263,7 +269,7 @@ public class MatchManager : NetworkBehaviour
     // Called by the server after a kill is credited. Checks whether that ended the round.
     public void CheckForWinner()
     {
-        if (!IsServerStarted || MatchOver) return;
+        if (!NetPresence.IsSpawned(this) || !IsServerStarted || MatchOver) return;
         // Objective rounds are won by the objective — kills there are means, not score.
         if (OddballMode || FlashpointMode || CtfMode) return;
 
@@ -287,7 +293,7 @@ public class MatchManager : NetworkBehaviour
         // Only the server runs the clocks; clients just render the SyncVars. IsSpawned is
         // checked first for the same reason as in OnSceneLoaded — Update runs from the frame
         // the scene loads, before FishNet has initialised this behaviour.
-        if (!IsSpawned || !IsServerStarted) return;
+        if (!NetPresence.IsSpawned(this) || !IsServerStarted) return;
 
         if (!MatchOver)
         {
@@ -394,7 +400,7 @@ public class MatchManager : NetworkBehaviour
     // the second way to score in oddball — the reason a player with no ball still has a job.
     public void ReportKill(PlayerScore killerScore, int victimOwnerId)
     {
-        if (!IsServerStarted || !OddballMode || MatchOver) return;
+        if (!NetPresence.IsSpawned(this) || !IsServerStarted || !OddballMode || MatchOver) return;
         if (killerScore == null || carrierId.Value != victimOwnerId) return;
 
         killerScore.AddOddballPoints(carrierKillPoints);
@@ -807,7 +813,7 @@ public class MatchManager : NetworkBehaviour
         {
             if (hp == null) continue;
             var net = hp.GetComponent<PlayerNetwork>();
-            if (net != null && net.IsOwner) return net.OwnerId;
+            if (NetPresence.IsSpawned(net) && net.IsOwner) return net.OwnerId;
         }
         return -1;
     }
@@ -1036,7 +1042,7 @@ public class MatchManager : NetworkBehaviour
                 var score = carrier != null ? carrier.GetComponent<PlayerScore>() : null;
                 int held = score != null ? score.OddballPoints : 0;
                 bool mine = carrier != null && carrier.GetComponent<PlayerNetwork>() != null
-                            && carrier.GetComponent<PlayerNetwork>().IsOwner;
+                            && OwnedLocally(carrier.GetComponent<PlayerNetwork>());
                 line.normal.textColor = PlayerColors.For(carrierId.Value);
                 text = mine ? $"YOU HAVE THE BALL   {held} / {oddballTarget}   (swing it)"
                             : $"{(score != null ? score.Label : "someone")} has the ball   {held} / {oddballTarget}";
@@ -1058,7 +1064,7 @@ public class MatchManager : NetworkBehaviour
                 var carrier = FindPlayerByOwner(flagCarrierId.Value);
                 var score = carrier != null ? carrier.GetComponent<PlayerScore>() : null;
                 var net = carrier != null ? carrier.GetComponent<PlayerNetwork>() : null;
-                bool mine = net != null && net.IsOwner;
+                bool mine = OwnedLocally(net);
                 line.normal.textColor = PlayerColors.For(flagCarrierId.Value);
                 text = mine
                     ? "YOU HAVE THE FLAG — run it to your green base"
@@ -1086,7 +1092,7 @@ public class MatchManager : NetworkBehaviour
                 var holder = FindPlayerByOwner(flashCapturerId.Value);
                 var score = holder != null ? holder.GetComponent<PlayerScore>() : null;
                 var pn = holder != null ? holder.GetComponent<PlayerNetwork>() : null;
-                bool mine = pn != null && pn.IsOwner;
+                bool mine = OwnedLocally(pn);
                 int pts = score != null ? score.Flashpoints : 0;
                 line.normal.textColor = PlayerColors.For(flashCapturerId.Value);
                 text = mine
