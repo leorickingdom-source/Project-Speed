@@ -113,10 +113,13 @@ public static class Ragdoll
             j.connectedBody = parent;
             j.enablePreprocessing = false;   // preprocessing lets a stretched joint explode
             j.swingAxis = Vector3.up;
-            j.lowTwistLimit = new SoftJointLimit { limit = -20f };
-            j.highTwistLimit = new SoftJointLimit { limit = 20f };
-            j.swing1Limit = new SoftJointLimit { limit = 40f };
-            j.swing2Limit = new SoftJointLimit { limit = 25f };
+            // Loose limits — the point is flop. Tight ones (the old ±20/40/25) held the body
+            // close to its death pose so the drag barely bent it, which read as stiff even with
+            // the launch localised. Wider swings let the torso jackknife and the limbs trail.
+            j.lowTwistLimit = new SoftJointLimit { limit = -40f };
+            j.highTwistLimit = new SoftJointLimit { limit = 40f };
+            j.swing1Limit = new SoftJointLimit { limit = 65f };
+            j.swing2Limit = new SoftJointLimit { limit = 45f };
         }
 
         Shove(bodies, clone.transform.position, awayFrom, impulse, spin, inheritVelocity);
@@ -137,11 +140,16 @@ public static class Ragdoll
     const float BaseLift = 2.5f;      // upward pop on EVERY death, so a hit lifts off the ground
                                       // instead of sliding along it — reads as struck, not shoved
 
-    // The shove goes on every part, not just the hips: pushing one bone of a jointed chain
-    // drags the rest along behind it, which reads as the body being yanked rather than struck.
+    // A ragdoll flops because ONE link is shoved and the joints drag the rest out of shape. The
+    // launch therefore lands on the torso alone — not on every part. Shoving all eleven with the
+    // same force (what this used to do) gives them identical motion, so no joint ever flexes and
+    // the body flies rigid as a plank: the "stiff" look. Only the inherited velocity is uniform,
+    // because a living body really was all moving together; everything after it is localised.
     static void Shove(System.Collections.Generic.Dictionary<HumanBodyBones, Rigidbody> bodies,
                       Vector3 at, Vector3? awayFrom, float impulse, float spin, Vector3 inheritVelocity)
     {
+        // Away from the killer is the way the bullet was travelling, so the body is thrown along
+        // the shot rather than in a direction of its own.
         Vector3 dir;
         if (awayFrom.HasValue)
         {
@@ -159,18 +167,39 @@ public static class Ragdoll
         float pop  = impulse * (1f + speed * SpeedPunch);
         float whip = spin    * (1f + speed * SpinPunch);
         float lift = BaseLift + Mathf.Min(speed * LiftPerSpeed, LiftCap);
-        // A random tilt on the spin axis so a fast death does not topple like a felled tree —
-        // the wobble is what sells it as ragdoll rather than an animation.
         Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.4f).normalized;
 
-        foreach (var kv in bodies)
+        // Living momentum, uniform and legitimate — the whole body was travelling together.
+        foreach (var kv in bodies) kv.Value.linearVelocity = inheritVelocity;
+
+        Rigidbody hips  = Get(bodies, HumanBodyBones.Hips);
+        Rigidbody chest = Get(bodies, HumanBodyBones.Spine);
+        Rigidbody head  = Get(bodies, HumanBodyBones.Head);
+
+        // The whole-body launch goes on the hips — the root mass — so it carries everyone with
+        // it through the joints instead of each limb being flung on its own.
+        Rigidbody core = hips ?? chest;
+        if (core != null)
         {
-            // Base momentum first — the whole body carries the velocity it had in life, so it
-            // keeps going the way it was going instead of stopping dead to be shoved from rest.
-            kv.Value.linearVelocity = inheritVelocity;
-            kv.Value.AddForce(dir * pop + Vector3.up * lift, ForceMode.VelocityChange);
-            kv.Value.AddTorque(spinAxis * whip, ForceMode.VelocityChange);
+            core.AddForce(dir * pop + Vector3.up * lift, ForceMode.VelocityChange);
+            core.AddTorque(spinAxis * whip, ForceMode.VelocityChange);
         }
+        // Upper body LEADS: the chest and head get an extra shove so they whip out ahead of the
+        // hips, which is the fold that makes a hit look like a hit.
+        if (chest != null) chest.AddForce(dir * pop * 0.6f + Vector3.up * lift * 0.4f, ForceMode.VelocityChange);
+        if (head  != null) head.AddForce(dir * pop * 0.5f, ForceMode.VelocityChange);
+
+        // A small random spin per part so the limbs flail independently instead of trailing in a
+        // frozen T-pose — this is the difference between a ragdoll and a mannequin on a wire.
+        foreach (var kv in bodies)
+            kv.Value.AddTorque(Random.insideUnitSphere * whip * 0.35f, ForceMode.VelocityChange);
+    }
+
+    static Rigidbody Get(System.Collections.Generic.Dictionary<HumanBodyBones, Rigidbody> bodies,
+                         HumanBodyBones b)
+    {
+        Rigidbody rb;
+        return bodies.TryGetValue(b, out rb) ? rb : null;
     }
 
     // Same shapes PlayerBody.BuildHitboxes lays down, built the same way and for the same

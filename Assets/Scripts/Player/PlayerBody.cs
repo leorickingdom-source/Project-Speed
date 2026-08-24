@@ -40,15 +40,14 @@ public class PlayerBody : MonoBehaviour
     [Header("Size")]
     [Tooltip("Uniform scale on the model. The X Bot mannequin stands 1.73m crown-to-floor at " +
              "1, inside a 2m movement capsule — so at 1 it read as a small figure in a big " +
-             "arena, because the world is built around the capsule, not the art. 1.15 exactly " +
-             "fills the capsule; 1.4 (default) overfills it for a big, obvious silhouette, at " +
-             "the cost of a head ~40cm above the 2m capsule top. " +
-             "That is only a VISUAL overhang — the movement capsule is unchanged, and the " +
-             "hitboxes scale with the body, so a shot still lands where the body is seen. The " +
-             "one cost is cosmetic: the crown can clip a 2m doorway the player still walks " +
-             "under. Scales the hitboxes with it, which is the point — bigger body, bigger " +
-             "target, and the two cannot drift apart.")]
-    public float modelScale = 1.4f;
+             "arena, because the world is built around the capsule, not the art. 1.15 makes the " +
+             "crown meet the capsule top, which is the value to hold: the body MATCHES the " +
+             "collider, and the eye height (fixed at the capsule, not the art) lands at the " +
+             "visible head instead of the chest. Push it higher and the head towers above both " +
+             "the capsule and your own eyeline, so looking at another player reads as looking " +
+             "UP at a giant. Hitboxes scale with it either way — a shot lands where the body is " +
+             "seen — so this is purely how big the figure looks against the capsule it is.")]
+    public float modelScale = 1.15f;
 
     [Header("Look")]
     [Tooltip("Emission driven by the player's identity colour, so a body reads as its colour " +
