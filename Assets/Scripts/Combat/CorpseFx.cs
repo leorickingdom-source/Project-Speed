@@ -18,8 +18,11 @@ public static class CorpseFx
     const float Lifetime = 4f;       // gone well before the 20s pickup cycle makes spots reused
     // Base pop for a STANDING-still death — a clean execution still clearly topples. Speed on
     // top of this is added by Ragdoll.Shove from the victim's velocity, so these stay modest.
-    const float TipImpulse = 4f;    // was 2.6
-    const float SpinImpulse = 7f;   // was 4
+    // Base pop for a STANDING-still death, so even a zero-velocity hitscan kill (a sniped
+    // stationary target) clearly LAUNCHES off the shot rather than folding in place. Speed on
+    // top of this is added by Ragdoll.Shove from the victim's velocity.
+    const float TipImpulse = 7f;    // was 4
+    const float SpinImpulse = 12f;  // was 7
 
     // On Ignore Raycast so a corpse never eats a live shot (WeaponController strips layer 2
     // from its hit mask for the same reason). It still collides with world geometry, so it

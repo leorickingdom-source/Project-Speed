@@ -134,6 +134,8 @@ public static class Ragdoll
     const float SpinPunch  = 0.10f;   // and spin grows faster, so a fast death tumbles wild
     const float LiftPerSpeed = 0.12f; // a little loft off the floor, so speed throws it UP too
     const float LiftCap = 4f;
+    const float BaseLift = 2.5f;      // upward pop on EVERY death, so a hit lifts off the ground
+                                      // instead of sliding along it — reads as struck, not shoved
 
     // The shove goes on every part, not just the hips: pushing one bone of a jointed chain
     // drags the rest along behind it, which reads as the body being yanked rather than struck.
@@ -156,7 +158,7 @@ public static class Ragdoll
         float speed = new Vector2(inheritVelocity.x, inheritVelocity.z).magnitude;
         float pop  = impulse * (1f + speed * SpeedPunch);
         float whip = spin    * (1f + speed * SpinPunch);
-        float lift = Mathf.Min(speed * LiftPerSpeed, LiftCap);
+        float lift = BaseLift + Mathf.Min(speed * LiftPerSpeed, LiftCap);
         // A random tilt on the spin axis so a fast death does not topple like a felled tree —
         // the wobble is what sells it as ragdoll rather than an animation.
         Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.4f).normalized;
