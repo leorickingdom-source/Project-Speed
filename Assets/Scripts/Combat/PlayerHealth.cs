@@ -408,6 +408,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // Spawned AFTER the live body is hidden, so the clone is the only one of it on screen.
         CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null, rig);
 
+        // Drop the first-person viewmodel too. It rides its own overlay camera on the eye, so
+        // hiding the world body above leaves the gun floating in the death-cam view otherwise.
+        var wc = GetComponent<WeaponController>();
+        if (wc != null) wc.HideViewmodelsForDeath();
+
         // Stop being solid. Runs on every client through the SyncVar callback, so the body
         // stops blocking shots on the shooter's machine too — which is the machine that
         // decides hits. Restored in ApplyAliveState BEFORE the motor unfreezes, so the

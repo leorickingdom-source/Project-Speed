@@ -744,12 +744,28 @@ public class WeaponController : MonoBehaviour
         if (RocketIndex < weapons.Length && lockedIndex != RocketIndex)
             weapons[RocketIndex].ammo = 0;
 
+        // The overlay camera back on — death turned it off (HideViewmodelsForDeath), and it
+        // is the sole thing that draws the viewmodel layer. Without this a respawned player
+        // holds an invisible gun for the rest of the life.
+        if (gunView != null) gunView.SetShown(true);
+
         // Viewmodel follows the LOADOUT, not a swap. This used to force it off, which left a
         // Knife player respawning empty-handed — holding the knife, swinging it, killing with
         // it, with nothing on screen — for the rest of that life.
         if (knifeView != null)
             knifeView.SetMode(Current == KnifeIndex ? KnifeView.Mode.Knife : KnifeView.Mode.None);
         SyncGunView();
+    }
+
+    // Both viewmodels off for death. The world body becomes a ragdoll, but the first-person
+    // gun is drawn by an overlay camera stacked on the eye — which the body-hiding in
+    // PlayerHealth never touches, so a corpse kept a rifle floating in the centre of the
+    // death-cam view. Runs on every client through the health SyncVar; the null guards make it
+    // a no-op on remotes, whose viewmodel is inert anyway. Restored by ResetForRespawn.
+    public void HideViewmodelsForDeath()
+    {
+        if (gunView != null) gunView.SetShown(false);
+        if (knifeView != null) knifeView.SetMode(KnifeView.Mode.None);
     }
 
     // Force the ball into your hands while you carry it, and give your own weapon back the
