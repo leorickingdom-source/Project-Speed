@@ -95,8 +95,16 @@ public static class Ragdoll
             AddCollider(t, p, map);
             var rb = t.gameObject.AddComponent<Rigidbody>();
             rb.mass = p.mass;
-            rb.linearDamping = 0.05f;
-            rb.angularDamping = 0.05f;
+            rb.linearDamping = 0.02f;
+            rb.angularDamping = 0.02f;   // barely damped — a corpse should keep flailing, not settle
+            // Unity clamps angular velocity at 7 rad/s by DEFAULT, which is the real reason the
+            // limbs looked stiff: no matter how hard a joint was yanked, the parts could not spin
+            // faster than a slow turn, so nothing ever whipped. Lift the ceiling and they snap.
+            rb.maxAngularVelocity = 40f;
+            // More solver iterations keep the loose joints stable at those speeds instead of
+            // jittering or blowing apart.
+            rb.solverIterations = 16;
+            rb.solverVelocityIterations = 4;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             bodies[p.bone] = rb;
@@ -169,8 +177,16 @@ public static class Ragdoll
         float lift = BaseLift + Mathf.Min(speed * LiftPerSpeed, LiftCap);
         Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.4f).normalized;
 
-        // Living momentum, uniform and legitimate — the whole body was travelling together.
-        foreach (var kv in bodies) kv.Value.linearVelocity = inheritVelocity;
+        // Momentum, but NOT uniform — that was half the stiffness. The torso carries the full
+        // living velocity; the limbs get a fraction, so they start behind and the joints have to
+        // drag them up to speed, which is exactly the trailing, whipping lag that reads as floppy.
+        // Uniform velocity on every part made them fly locked together like a shop mannequin.
+        foreach (var kv in bodies)
+        {
+            bool isCore = kv.Key == HumanBodyBones.Hips || kv.Key == HumanBodyBones.Spine
+                       || kv.Key == HumanBodyBones.Head;
+            kv.Value.linearVelocity = inheritVelocity * (isCore ? 1f : 0.35f);
+        }
 
         Rigidbody hips  = Get(bodies, HumanBodyBones.Hips);
         Rigidbody chest = Get(bodies, HumanBodyBones.Spine);
