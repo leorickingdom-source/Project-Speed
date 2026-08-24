@@ -38,7 +38,7 @@ public static class Ragdoll
     // `awayFrom` is the killer's position when known — the body falls away from the shot, the
     // detail that makes the physics read as caused rather than random.
     public static GameObject Spawn(PlayerBody rig, Transform model, Vector3? awayFrom,
-                                   float impulse, float spin, float lifetime)
+                                   float impulse, float spin, float lifetime, Vector3 inheritVelocity)
     {
         if (rig == null || model == null) return null;
 
@@ -119,15 +119,26 @@ public static class Ragdoll
             j.swing2Limit = new SoftJointLimit { limit = 25f };
         }
 
-        Shove(bodies, clone.transform.position, awayFrom, impulse, spin);
+        Shove(bodies, clone.transform.position, awayFrom, impulse, spin, inheritVelocity);
         Object.Destroy(clone, lifetime);
         return clone;
     }
 
+    // How hard death reads scales with how the player died, and the biggest input is free:
+    // the victim's own velocity. A sprinter's corpse should tumble forward, a rocketed one
+    // should fly — and it already can, because Explosion.AddImpulse put the blast INTO that
+    // velocity before death, so inheriting it captures momentum and explosive knockback in one
+    // number, identically on every client with no networking. Hitscan adds no knockback, so
+    // those deaths carry only the running speed, which is the honest answer.
+    const float SpeedPunch = 0.04f;   // directional pop grows with speed (+100% at 25 m/s)
+    const float SpinPunch  = 0.10f;   // and spin grows faster, so a fast death tumbles wild
+    const float LiftPerSpeed = 0.12f; // a little loft off the floor, so speed throws it UP too
+    const float LiftCap = 4f;
+
     // The shove goes on every part, not just the hips: pushing one bone of a jointed chain
     // drags the rest along behind it, which reads as the body being yanked rather than struck.
     static void Shove(System.Collections.Generic.Dictionary<HumanBodyBones, Rigidbody> bodies,
-                      Vector3 at, Vector3? awayFrom, float impulse, float spin)
+                      Vector3 at, Vector3? awayFrom, float impulse, float spin, Vector3 inheritVelocity)
     {
         Vector3 dir;
         if (awayFrom.HasValue)
@@ -142,12 +153,21 @@ public static class Ragdoll
             dir = new Vector3(r.x, 0f, r.y);
         }
 
+        float speed = new Vector2(inheritVelocity.x, inheritVelocity.z).magnitude;
+        float pop  = impulse * (1f + speed * SpeedPunch);
+        float whip = spin    * (1f + speed * SpinPunch);
+        float lift = Mathf.Min(speed * LiftPerSpeed, LiftCap);
+        // A random tilt on the spin axis so a fast death does not topple like a felled tree —
+        // the wobble is what sells it as ragdoll rather than an animation.
+        Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.4f).normalized;
+
         foreach (var kv in bodies)
         {
-            kv.Value.AddForce(dir * impulse, ForceMode.VelocityChange);
-            // Perpendicular to the fall, so the body topples the way it was pushed instead of
-            // spinning on the spot like a top.
-            kv.Value.AddTorque(Vector3.Cross(Vector3.up, dir) * spin, ForceMode.VelocityChange);
+            // Base momentum first — the whole body carries the velocity it had in life, so it
+            // keeps going the way it was going instead of stopping dead to be shoved from rest.
+            kv.Value.linearVelocity = inheritVelocity;
+            kv.Value.AddForce(dir * pop + Vector3.up * lift, ForceMode.VelocityChange);
+            kv.Value.AddTorque(spinAxis * whip, ForceMode.VelocityChange);
         }
     }
 

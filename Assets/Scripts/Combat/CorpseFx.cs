@@ -16,8 +16,10 @@ using UnityEngine;
 public static class CorpseFx
 {
     const float Lifetime = 4f;       // gone well before the 20s pickup cycle makes spots reused
-    const float TipImpulse = 2.6f;   // enough to clearly topple, not to launch across the map
-    const float SpinImpulse = 4f;
+    // Base pop for a STANDING-still death — a clean execution still clearly topples. Speed on
+    // top of this is added by Ragdoll.Shove from the victim's velocity, so these stay modest.
+    const float TipImpulse = 4f;    // was 2.6
+    const float SpinImpulse = 7f;   // was 4
 
     // On Ignore Raycast so a corpse never eats a live shot (WeaponController strips layer 2
     // from its hit mask for the same reason). It still collides with world geometry, so it
@@ -28,12 +30,16 @@ public static class CorpseFx
     // the swap reads as the same player keeling over, not a prop appearing. `awayFrom` is the
     // killer's position when known; the corpse falls away from the shot, which is the one
     // detail that makes the physics read as caused rather than random.
-    public static void Spawn(Transform body, Vector3? awayFrom, PlayerBody rig = null)
+    // `inheritVelocity` is the victim's velocity the instant they died — running momentum, and
+    // (via Explosion.AddImpulse) any blast that killed them. Carried into the body so a fast or
+    // rocketed death flies instead of flopping. Defaults to zero for deaths with no motor.
+    public static void Spawn(Transform body, Vector3? awayFrom, PlayerBody rig = null,
+                             Vector3 inheritVelocity = default)
     {
         // Ragdoll first. It needs the humanoid, so it declines on its own when the pack is
         // missing or the avatar is generic, and the capsule below picks the death up instead.
         if (rig != null && rig.Model != null
-            && Ragdoll.Spawn(rig, rig.Model, awayFrom, TipImpulse, SpinImpulse, Lifetime) != null)
+            && Ragdoll.Spawn(rig, rig.Model, awayFrom, TipImpulse, SpinImpulse, Lifetime, inheritVelocity) != null)
             return;
 
         if (body == null) return;
@@ -75,7 +81,10 @@ public static class CorpseFx
             dir = new Vector3(r.x, 0f, r.y);
         }
 
-        rb.AddForce(dir * TipImpulse, ForceMode.VelocityChange);
+        // Same momentum inheritance as the ragdoll path, so the capsule fallback flies too.
+        float speed = new Vector2(inheritVelocity.x, inheritVelocity.z).magnitude;
+        rb.linearVelocity = inheritVelocity;
+        rb.AddForce(dir * TipImpulse * (1f + speed * 0.04f), ForceMode.VelocityChange);
         // Torque axis perpendicular to the fall direction, so it topples in the direction of
         // the shove instead of spinning on the spot like a top.
         rb.AddTorque(Vector3.Cross(Vector3.up, dir) * SpinImpulse, ForceMode.VelocityChange);

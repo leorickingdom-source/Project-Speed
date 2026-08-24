@@ -406,7 +406,12 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             }
         }
         // Spawned AFTER the live body is hidden, so the clone is the only one of it on screen.
-        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null, rig);
+        // Read velocity HERE, before it is zeroed at the freeze below — it is the death-moment
+        // momentum the corpse inherits, and it already includes any explosive knockback that
+        // Explosion.AddImpulse folded into the motor. A player killed mid-sprint or mid-blast
+        // flies; a standing execution just topples.
+        Vector3 deathVelocity = motor != null ? motor.velocity : Vector3.zero;
+        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null, rig, deathVelocity);
 
         // Drop the first-person viewmodel too. It rides its own overlay camera on the eye, so
         // hiding the world body above leaves the gun floating in the death-cam view otherwise.
