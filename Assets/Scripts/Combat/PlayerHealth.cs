@@ -67,6 +67,15 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     // The single source of truth for health. Only the server assigns it once spawned;
     // clients receive it and react through OnChange.
+    // Where the killing shot came from, synced so the corpse can be thrown away from it on
+    // EVERY client — not just the ones a racing TargetRpc happened to reach in time. Declared
+    // BEFORE hp on purpose: FishNet applies SyncVars in registration order, so this lands before
+    // hp's OnChange fires ApplyDeadState, which is the whole point — the death reads a position
+    // that is already there. The server writes it in RecordServerAttacker, before the lethal hit.
+    // Sentinel Y marks "no known attacker" (a pit or the void), where the corpse falls untossed.
+    static readonly Vector3 NoAttacker = new Vector3(0f, -99999f, 0f);
+    readonly SyncVar<Vector3> deathFromPos = new SyncVar<Vector3>(NoAttacker);
+
     readonly SyncVar<float> hp = new SyncVar<float>();
 
     public float Hp => hp.Value;
@@ -172,6 +181,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         serverAttacker = attacker;
         serverAttackerAt = Time.time;
         serverAttackerKind = kind;
+        // Synced so the ragdoll direction survives to every client. Set before the damage that
+        // may kill, so it is already in place when the death lands — an explosion passes its own
+        // centre as the attacker, which is exactly where the blast threw them from.
+        if (attacker != null) deathFromPos.Value = attacker.transform.position;
     }
 
     bool HasFreshAttacker => Time.time - lastAttackerAt <= attackerMemory;
@@ -318,6 +331,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // Armour is earned per life, not banked across them — otherwise the pickup stops being
         // contested the moment one player has it.
         if (armour != null) armour.ClearOnRespawn();
+        deathFromPos.Value = NoAttacker; // a fresh life owes nothing to the last one's killer
         hp.Value = MaxHp; // drives ApplyAliveState everywhere through OnChange
         invulnUntil = Time.time + spawnInvuln;
     }
@@ -411,7 +425,13 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // Explosion.AddImpulse folded into the motor. A player killed mid-sprint or mid-blast
         // flies; a standing execution just topples.
         Vector3 deathVelocity = motor != null ? motor.velocity : Vector3.zero;
-        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null, rig, deathVelocity);
+        // The SYNCED attacker position, not the client-only lastAttackerPos, which arrives on a
+        // separate RPC that loses the race to the death for a standing target — the body just
+        // toppled in place instead of flying off the shot. This is set before the lethal hit and
+        // ordered ahead of the health SyncVar, so it is reliably here now. Sentinel Y = no
+        // attacker (a pit), where the corpse is left to fall on its own.
+        Vector3? shotFrom = deathFromPos.Value.y < -9000f ? (Vector3?)null : deathFromPos.Value;
+        CorpseFx.Spawn(bodyT, shotFrom, rig, deathVelocity);
 
         // Drop the first-person viewmodel too. It rides its own overlay camera on the eye, so
         // hiding the world body above leaves the gun floating in the death-cam view otherwise.
