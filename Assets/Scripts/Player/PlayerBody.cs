@@ -49,6 +49,14 @@ public class PlayerBody : MonoBehaviour
              "seen — so this is purely how big the figure looks against the capsule it is.")]
     public float modelScale = 1.15f;
 
+    [Tooltip("Width and depth multiplier ON TOP of modelScale, height left alone. The X Bot is a " +
+             "slim figure and the movement capsule is a full metre wide, so at capsule HEIGHT the " +
+             "body still looks small — it does not fill the girth. This broadens the silhouette " +
+             "into a heavier, more present build without making it taller (taller drops the " +
+             "eyeline and makes others loom). 1 = the mannequin's own proportions. Note it widens " +
+             "the hitboxes with it, which is consistent — a broader body is a broader target.")]
+    [Range(1f, 1.6f)] public float girth = 1.2f;
+
     [Header("Look")]
     [Tooltip("Emission driven by the player's identity colour, so a body reads as its colour " +
              "across the arena instead of only under good lighting — the single biggest thing " +
@@ -204,7 +212,9 @@ public class PlayerBody : MonoBehaviour
 
         var pb = playerRoot.gameObject.AddComponent<PlayerBody>();
         // Before Bind, so the hitboxes measure bone spans at the scale they will be seen at.
-        go.transform.localScale = Vector3.one * pb.modelScale;
+        // Height from modelScale, width/depth from modelScale * girth — a broader figure at the
+        // same capsule height. Before Bind, so the hitboxes measure their spans at final scale.
+        go.transform.localScale = new Vector3(pb.modelScale * pb.girth, pb.modelScale, pb.modelScale * pb.girth);
         pb.rigHitboxes &= hitboxes;
         pb.model = go.transform;
         pb.motor = playerRoot.GetComponent<PlayerMotor>();
