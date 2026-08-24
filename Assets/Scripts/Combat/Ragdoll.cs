@@ -156,14 +156,21 @@ public static class Ragdoll
     static void Shove(System.Collections.Generic.Dictionary<HumanBodyBones, Rigidbody> bodies,
                       Vector3 at, Vector3? awayFrom, float impulse, float spin, Vector3 inheritVelocity)
     {
-        // Away from the killer is the way the bullet was travelling, so the body is thrown along
-        // the shot rather than in a direction of its own.
+        // Direction the body is thrown, in priority order so it is never nonsense:
+        //   1. AWAY from whoever shot you — the way the bullet was travelling. This is the one
+        //      that has to win when it is known, because "flew the way I shot them" is the whole
+        //      point of a directional ragdoll.
+        //   2. Failing that (the attacker position had not reached this client yet), the victim's
+        //      own motion, so a runner still tumbles the way they were going.
+        //   3. Failing both, random — a standing target with no known killer.
         Vector3 dir;
-        if (awayFrom.HasValue)
+        if (awayFrom.HasValue && (at - awayFrom.Value).sqrMagnitude > 0.01f)
         {
-            dir = at - awayFrom.Value;
-            dir.y = 0f;
-            dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Random.insideUnitSphere.normalized;
+            dir = at - awayFrom.Value; dir.y = 0f; dir.Normalize();
+        }
+        else if (inheritVelocity.sqrMagnitude > 1f)
+        {
+            dir = new Vector3(inheritVelocity.x, 0f, inheritVelocity.z).normalized;
         }
         else
         {
@@ -175,7 +182,10 @@ public static class Ragdoll
         float pop  = impulse * (1f + speed * SpeedPunch);
         float whip = spin    * (1f + speed * SpinPunch);
         float lift = BaseLift + Mathf.Min(speed * LiftPerSpeed, LiftCap);
-        Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.4f).normalized;
+        // Somersault around the axis across the travel, so the body tumbles the WAY it is flying.
+        // Barely any random tilt — the old 0.4 turned the launch into a chaotic spin that read
+        // as "flew in a random direction", which is exactly the "doesn't follow the shot" bug.
+        Vector3 spinAxis = (Vector3.Cross(Vector3.up, dir) + Random.insideUnitSphere * 0.1f).normalized;
 
         // Momentum, but NOT uniform — that was half the stiffness. The torso carries the full
         // living velocity; the limbs get a fraction, so they start behind and the joints have to
@@ -200,15 +210,17 @@ public static class Ragdoll
             core.AddForce(dir * pop + Vector3.up * lift, ForceMode.VelocityChange);
             core.AddTorque(spinAxis * whip, ForceMode.VelocityChange);
         }
-        // Upper body LEADS: the chest and head get an extra shove so they whip out ahead of the
-        // hips, which is the fold that makes a hit look like a hit.
-        if (chest != null) chest.AddForce(dir * pop * 0.6f + Vector3.up * lift * 0.4f, ForceMode.VelocityChange);
-        if (head  != null) head.AddForce(dir * pop * 0.5f, ForceMode.VelocityChange);
+        // Upper body LEADS: the chest and head get an extra shove along the SAME direction so the
+        // torso whips out ahead of the hips down the line of the shot — the fold that reads as a
+        // hit, and it keeps everything travelling the one way instead of scattering.
+        if (chest != null) chest.AddForce(dir * pop * 0.7f + Vector3.up * lift * 0.4f, ForceMode.VelocityChange);
+        if (head  != null) head.AddForce(dir * pop * 0.6f, ForceMode.VelocityChange);
 
-        // A small random spin per part so the limbs flail independently instead of trailing in a
-        // frozen T-pose — this is the difference between a ragdoll and a mannequin on a wire.
+        // A WHISPER of random spin per part, for life in the limbs — not the chaos the old 0.35
+        // was, which spun the whole body off its launch line. Enough to unfreeze the T-pose,
+        // little enough that the shot direction still owns the motion.
         foreach (var kv in bodies)
-            kv.Value.AddTorque(Random.insideUnitSphere * whip * 0.35f, ForceMode.VelocityChange);
+            kv.Value.AddTorque(Random.insideUnitSphere * whip * 0.1f, ForceMode.VelocityChange);
     }
 
     static Rigidbody Get(System.Collections.Generic.Dictionary<HumanBodyBones, Rigidbody> bodies,
