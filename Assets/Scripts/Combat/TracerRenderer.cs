@@ -41,6 +41,11 @@ public class TracerRenderer : MonoBehaviour
 
     public void Show(Vector3 from, Vector3 to, Color col, float seconds)
     {
+        // Every tracer in the game passes through here — your own and, via PlayerNetwork's
+        // BroadcastTracer, everyone else's. That makes it the one place a recorder can see all
+        // shots without any new networking.
+        MatchRecorder.RecordShot(from, to, col);
+
         if (pool == null || pool.Length == 0) return;
         int i = next;
         next = (next + 1) % pool.Length;

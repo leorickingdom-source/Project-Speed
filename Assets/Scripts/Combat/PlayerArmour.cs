@@ -37,7 +37,11 @@ public class PlayerArmour : NetworkBehaviour
     public bool HasArmour => points.Value > 0.01f;
 
     // Same rule as PlayerHealth: the server owns this once spawned, we own it offline.
-    bool HasAuthority => !IsSpawned || IsServerStarted;
+    // Through NetPresence: IsSpawned, IsServerStarted and IsOwner all dereference a cache
+    // FishNet only fills in when it initialises this behaviour, so each of them throws
+    // rather than answering while it has not. Short-circuit keeps IsServerStarted behind
+    // the guard, where it is safe to ask.
+    bool HasAuthority => !NetPresence.IsSpawned(this) || IsServerStarted;
 
     // Takes a hit, returns whatever is left over for health. Called by PlayerHealth.Damage,
     // which is the single choke point every damage source already goes through — putting it

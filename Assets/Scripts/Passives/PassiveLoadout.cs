@@ -24,7 +24,7 @@ public class PassiveLoadout : NetworkBehaviour
     public event System.Action Changed;
 
     // Offline keeps the Inspector value; networked reads the synced one, so both work.
-    PassiveType Active => IsSpawned ? synced.Value : passive;
+    PassiveType Active => NetPresence.IsSpawned(this) ? synced.Value : passive;
 
     // Guards None so Has(None) is false rather than matching an empty loadout.
     public bool Has(PassiveType type) => type != PassiveType.None && Active == type;
@@ -56,7 +56,7 @@ public class PassiveLoadout : NetworkBehaviour
     // networked, since the server owns the value.
     public void Equip(PassiveType type)
     {
-        if (IsSpawned || type == passive) return;
+        if (NetPresence.IsSpawned(this) || type == passive) return;
         passive = type;
         Changed?.Invoke();
     }

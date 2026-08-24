@@ -236,7 +236,7 @@ public class SpeedHud : MonoBehaviour
 
         foreach (var id in others)
         {
-            if (id == null || id.IsOwner) continue;
+            if (!NetPresence.IsSpawned(id) || id.IsOwner) continue;
 
             // Dead players do not get a name — their body is about to teleport anyway.
             var hp = id.GetComponent<PlayerHealth>();

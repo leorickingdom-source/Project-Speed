@@ -50,3 +50,6 @@ sysinfo.txt
 # Unity crash-recovery dumps
 Assets/_Recovery/
 Assets/_Recovery.meta
+
+# Plastic SCM workspace state — rewritten constantly, ~600KB binary churn per commit
+.plastic/

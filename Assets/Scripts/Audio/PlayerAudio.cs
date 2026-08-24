@@ -37,6 +37,7 @@ public class PlayerAudio : MonoBehaviour
     PlayerMotor motor;
     AudioSource src;
     AudioClip land, jump, dashClip, grappleOn, grappleOff, grappleWarn, fireLow, fireHigh, meleeSwing;
+    AudioClip reload;
 
     bool wasGrounded;
     bool wasGrappled;
@@ -58,6 +59,9 @@ public class PlayerAudio : MonoBehaviour
         src.maxDistance = maxDistance;
         src.dopplerLevel = 0f;                 // off: fast movement would warp pitch constantly
 
+        // All synthesised, deliberately. The Easy FPS recordings were tried here and reverted:
+        // they were made for a different game and sat oddly against sounds that are shaped for
+        // this one's verbs, so the whole set is generated again and stays internally consistent.
         land = ProceduralAudio.Noise("land", 0.16f, 26f, 0.6f);
         jump = ProceduralAudio.Sweep("jump", 220f, 420f, 0.10f, 26f, 0.35f);
         dashClip = ProceduralAudio.Sweep("dash", 700f, 180f, 0.20f, 14f, 0.45f);
@@ -68,6 +72,11 @@ public class PlayerAudio : MonoBehaviour
         grappleWarn = ProceduralAudio.Tone("grapWarn", 1250f, 0.06f, 55f, 0.25f);
         fireLow = ProceduralAudio.Noise("fireLow", 0.13f, 40f, 0.55f);
         fireHigh = ProceduralAudio.Noise("fireHigh", 0.06f, 70f, 0.4f);
+        // Reload is the one thing kept from that pass, because it filled a real gap rather than
+        // replacing something: reloading used to be silent, and pressing R to hear nothing is
+        // indistinguishable from not having pressed it. Synthesised like everything else — a
+        // dull mechanical double-knock, low enough not to be mistaken for a shot.
+        reload = ProceduralAudio.Noise("reload", 0.22f, 18f, 0.35f);
         // A downward whoosh, unlike every gunshot in the game — melee is an instant kill, so
         // hearing one behind you has to be instantly distinguishable from being shot at.
         meleeSwing = ProceduralAudio.Sweep("melee", 520f, 130f, 0.16f, 18f, 0.5f);
@@ -85,6 +94,10 @@ public class PlayerAudio : MonoBehaviour
     // Called by WeaponController on the owner, and by PlayerNetwork on everyone else when the
     // fire message arrives. Heavier weapons get a lower pitch so shots are identifiable by ear.
     public void PlayMelee() => Play(meleeSwing, Random.Range(0.95f, 1.05f), 1.1f);
+
+    // Quieter than a shot on purpose: it is confirmation for you, not an announcement that
+    // tells the room you are the one who cannot shoot back for the next second.
+    public void PlayReload() => Play(reload, 1f, 0.6f);
 
     public void PlayFire(int weaponIndex)
     {

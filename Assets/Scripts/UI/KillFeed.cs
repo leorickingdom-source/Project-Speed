@@ -60,7 +60,7 @@ public class KillFeed : NetworkBehaviour
 
         // Offline there is nobody to broadcast to, so the local list is the whole feed. This is
         // what makes the feed work in single-player practice against bots.
-        if (!instance.IsSpawned || !instance.IsServerStarted)
+        if (!NetPresence.IsSpawned(instance) || !NetPresence.IsServerStarted)
         {
             instance.AddLocal(killer, victim, kind);
             return;
@@ -79,6 +79,11 @@ public class KillFeed : NetworkBehaviour
     void AddLocal(NetworkObject killer, NetworkObject victim, KillKind kind)
     {
         if (victim == null) return;
+
+        // Same choke point the feed uses, for the same reason: this runs on EVERY client, for
+        // both the offline path and the broadcast one, so the replay recorder sees every kill
+        // without a second message carrying the same fact.
+        if (killer != null) MatchRecorder.RecordKill(killer.transform, kind);
 
         entries.Add(new Entry
         {

@@ -229,7 +229,7 @@ public class Pickup : NetworkBehaviour
             transform.Rotate(spinAxis, spinSpeed * Time.deltaTime, Space.World);
         }
 
-        if (!IsServerStarted) return;
+        if (!NetPresence.IsServerStarted) return;
 
         if (!on)
         {

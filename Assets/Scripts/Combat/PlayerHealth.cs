@@ -75,7 +75,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     public bool Invulnerable => Time.time < invulnUntil;
 
     // Who may mutate health: the server when networked, ourselves when running offline.
-    bool HasAuthority => !IsSpawned || IsServerStarted;
+    // Through NetPresence: IsSpawned, IsServerStarted and IsOwner all dereference a cache
+    // FishNet only fills in when it initialises this behaviour, so each of them throws
+    // rather than answering while it has not. Short-circuit keeps IsServerStarted behind
+    // the guard, where it is safe to ask.
+    bool HasAuthority => !NetPresence.IsSpawned(this) || IsServerStarted;
 
     // Effective ceiling = base + passives. Everything that clamps or refills reads THIS,
     // never the raw maxHp field, so equipping Vitality can't leave you capped at the base.
@@ -384,9 +388,16 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         // callback, so everyone sees the same body drop. Renderer states are remembered
         // rather than assumed: the owner's own body is already hidden by PlayerNetwork, and
         // blindly re-enabling it on respawn would put a capsule over their camera.
-        if (bodyT != null)
+        // The humanoid is hidden alongside the capsule, not instead of it. Hiding only the
+        // capsule was right while the capsule WAS the player; once bodies arrived it left the
+        // model standing where it died, mid-stride, next to its own corpse.
+        var rig = GetComponent<PlayerBody>();
+        var rends = new System.Collections.Generic.List<Renderer>();
+        if (bodyT != null) rends.AddRange(bodyT.GetComponentsInChildren<Renderer>(true));
+        if (rig != null && rig.Model != null) rends.AddRange(rig.Model.GetComponentsInChildren<Renderer>(true));
+        if (rends.Count > 0)
         {
-            hiddenRends = bodyT.GetComponentsInChildren<Renderer>(true);
+            hiddenRends = rends.ToArray();
             hiddenPrev = new bool[hiddenRends.Length];
             for (int i = 0; i < hiddenRends.Length; i++)
             {
@@ -394,7 +405,8 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
                 hiddenRends[i].enabled = false;
             }
         }
-        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null);
+        // Spawned AFTER the live body is hidden, so the clone is the only one of it on screen.
+        CorpseFx.Spawn(bodyT, HasFreshAttacker ? lastAttackerPos : (Vector3?)null, rig);
 
         // Stop being solid. Runs on every client through the SyncVar callback, so the body
         // stops blocking shots on the shooter's machine too — which is the machine that

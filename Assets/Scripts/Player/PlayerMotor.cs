@@ -24,7 +24,13 @@ public class PlayerMotor : MonoBehaviour
              "from it) and change how you fit the slide tunnel — much bigger change, same benefit.")]
     public float featherweightRadius = 0.4f;
     public float height = 2f;
-    public LayerMask groundMask = ~0; // self is skipped explicitly
+    public LayerMask groundMask = ~0; // self, hitboxes and corpses are skipped explicitly
+
+    // Unity's builtin Ignore Raycast layer, which CorpseFx and Ragdoll put dead bodies on.
+    const int CorpseLayer = 2;
+
+    // Scratch space for Depenetrate's overlap query — see the note there.
+    readonly Collider[] overlapBuf = new Collider[16];
     public float skin = 0.02f;
     public int maxSlides = 5;
 
@@ -294,6 +300,24 @@ public class PlayerMotor : MonoBehaviour
         }
         // Exclude our own layer so ground/wall casts never hit the player capsule.
         groundMask &= ~(1 << gameObject.layer);
+        // And the hitbox layer, which is for SHOOTING at, not for walking into.
+        //
+        // The mask ships as ~0, so when the rig arrived every collider it builds — eleven per
+        // player, on arms, legs, head — silently became world geometry to this motor. Two costs,
+        // both paid on the move: CollideAndSlide let you bump into a stranger's forearm as if it
+        // were a wall, and Depenetrate ran a ComputePenetration against all eleven, two or three
+        // times a tick, for every player standing near you.
+        //
+        // Only the shooting mask wants these — see WeaponController.HitMask, which goes the
+        // other way and drops the capsule layer while a rig is up.
+        groundMask &= ~(1 << PlayerBody.HitboxLayer);
+        // Corpses too, for a reason that is not performance. A corpse is spawned locally on
+        // every client and shoved in a direction only the victim's machine agrees on, so it
+        // lies somewhere slightly different on each one. Let it block a player and the movement
+        // sim stops matching between client and server — a cosmetic object deciding where you
+        // can stand. Ragdolls made the cost obvious (eleven colliders where the capsule was one)
+        // but the desync was there with the capsule.
+        groundMask &= ~(1 << CorpseLayer);
         flow = 1f;
     }
 
@@ -1013,11 +1037,26 @@ public class PlayerMotor : MonoBehaviour
     void Depenetrate(ref Vector3 pos)
     {
         GetCapsule(pos, out Vector3 p1, out Vector3 p2);
-        Collider[] overlaps = Physics.OverlapCapsule(p1, p2, Radius, groundMask,
+        // NonAlloc, into a buffer reused for the life of the motor. OverlapCapsule returns a
+        // fresh array every call and this runs two or three times per tick for as long as the
+        // player exists, which is a steady drip of garbage for the collector to sweep up mid-
+        // match. The same pattern the weapon and grapple casts already use.
+        //
+        // A full buffer is silently truncated rather than grown. 16 is well clear of what a
+        // capsule can touch now that hitboxes and corpses are out of groundMask — before that
+        // exclusion, two players standing together could have filled it on their own.
+        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, Radius, overlapBuf, groundMask,
             QueryTriggerInteraction.Ignore);
-        foreach (var other in overlaps)
+        for (int i = 0; i < n; i++)
         {
+            var other = overlapBuf[i];
             if (other == col) continue;
+            // Anything else hanging off this player is ours too, and pushing away from our own
+            // body is a self-propelling engine. Skipping only `col` was enough while the capsule
+            // was the sole collider we owned; the animated hitboxes are children of the body
+            // model, so the first frame they switched on the motor started shoving itself
+            // sideways out of its own arms — a player drifting back-left with no input.
+            if (other.transform.root == transform.root) continue;
             if (Physics.ComputePenetration(col, pos, transform.rotation,
                     other, other.transform.position, other.transform.rotation,
                     out Vector3 dir, out float depth))
