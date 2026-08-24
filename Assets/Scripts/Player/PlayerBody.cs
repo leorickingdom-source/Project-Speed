@@ -39,12 +39,24 @@ public class PlayerBody : MonoBehaviour
 
     [Header("Size")]
     [Tooltip("Uniform scale on the model. The X Bot mannequin stands 1.73m crown-to-floor at " +
-             "1, inside a 2m movement capsule, which is what made it read as a small figure " +
-             "in a big arena: the world is built around the capsule, not the art. 1.15 fills " +
-             "the capsule, so the body you see is the height the level was measured for. " +
-             "Scales the hitboxes with it, which is the point — they hang off these bones, so " +
-             "a bigger body is a bigger target and the two cannot drift apart.")]
-    public float modelScale = 1.15f;
+             "1, inside a 2m movement capsule — so at 1 it read as a small figure in a big " +
+             "arena, because the world is built around the capsule, not the art. 1.15 exactly " +
+             "fills the capsule; 1.25 (default) overfills it deliberately, trading a taller, " +
+             "more obvious silhouette for a head that sits slightly above the 2m capsule top. " +
+             "That is only a VISUAL overhang — the movement capsule is unchanged, and the " +
+             "hitboxes scale with the body, so a shot still lands where the body is seen. The " +
+             "one cost is cosmetic: the crown can clip a 2m doorway the player still walks " +
+             "under. Scales the hitboxes with it, which is the point — bigger body, bigger " +
+             "target, and the two cannot drift apart.")]
+    public float modelScale = 1.25f;
+
+    [Header("Look")]
+    [Tooltip("Emission driven by the player's identity colour, so a body reads as its colour " +
+             "across the arena instead of only under good lighting — the single biggest thing " +
+             "that makes a player OBVIOUS in a cool, desaturated map. 0 is matte (old " +
+             "behaviour). Kept modest so the glow reinforces the albedo rather than blowing it " +
+             "out to white, which is exactly what the grey imported emission used to do.")]
+    [Range(0f, 1.5f)] public float emissionStrength = 0.5f;
 
     [Header("Hitboxes")]
     [Tooltip("Build colliders along the skeleton so shots are tested against the body you can " +
@@ -343,14 +355,26 @@ public class PlayerBody : MonoBehaviour
             var m = r.material;                       // instance, per player
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", colour);
             m.color = colour;
-            // Emission is forced off rather than assumed off. The imported material arrived
-            // with _EMISSION enabled and a 0.71 grey emission colour — left over from the
-            // shader it had before the URP conversion — which swamped the albedo and rendered
-            // every player as the same near-white figure whatever colour they were assigned.
-            // Player identity is the entire job of this tint, so it cannot depend on an
-            // imported material happening to be set up correctly.
-            m.DisableKeyword("_EMISSION");
-            if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", Color.black);
+            // Emission is DRIVEN, not assumed. The imported material shipped _EMISSION on with
+            // a 0.71 GREY colour — a leftover from the pre-URP shader that washed every player
+            // to the same near-white regardless of their tint, which is why this used to force
+            // it off entirely. The fix was never "no emission", it was "emission that is the
+            // player's colour": at emissionStrength it makes the body self-lit in its identity
+            // hue, the strongest single cue for telling players apart across a big map. Off
+            // (0) restores the matte look. CorpseFx copies this material, so corpses glow too.
+            if (m.HasProperty("_EmissionColor"))
+            {
+                if (emissionStrength > 0f)
+                {
+                    m.EnableKeyword("_EMISSION");
+                    m.SetColor("_EmissionColor", colour * emissionStrength);
+                }
+                else
+                {
+                    m.DisableKeyword("_EMISSION");
+                    m.SetColor("_EmissionColor", Color.black);
+                }
+            }
         }
     }
 
