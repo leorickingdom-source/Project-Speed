@@ -148,7 +148,11 @@ public class PlayerMotor : MonoBehaviour
     public float crouchSpeed = 4f;         // crouch-walk speed (ignores flow)
     public float stanceLerp = 14f;         // how fast the capsule/eye resize
     public Transform head;                 // camera to lower (auto = child camera)
-    public float standEyeHeight = 1.6f;    // camera local Y standing (captured in Awake)
+    // Camera local Y while standing. Explicit, NOT captured from the camera transform any more:
+    // the body is scaled up past the capsule for presence, and the viewpoint has to rise with it
+    // or you look out of the chest of a giant (the "camera is low" complaint). Capped under the
+    // 2m capsule top so the eye never sees over cover the hitbox cannot clear.
+    public float standEyeHeight = 1.8f;
     [Tooltip("The visible body, scaled to match the crouch so other players see the stance " +
              "they are shooting at. Auto = the child named \"Body\".")]
     public Transform body;                 // visual capsule (auto = child "Body")
@@ -291,7 +295,9 @@ public class PlayerMotor : MonoBehaviour
             var camT = GetComponentInChildren<Camera>();
             if (camT != null) head = camT.transform;
         }
-        if (head != null) standEyeHeight = head.localPosition.y;
+        // standEyeHeight is a tunable now (see the field), not read back from the camera's
+        // authored Y — that is what lets a bigger body raise the eye without re-authoring
+        // the prefab. The camera is driven TO standEyeHeight every frame below.
         if (body == null) body = transform.Find("Body");
         if (body != null)
         {

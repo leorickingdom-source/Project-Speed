@@ -38,16 +38,16 @@ public class PlayerBody : MonoBehaviour
     public static bool RigHitboxesInUse { get; private set; }
 
     [Header("Size")]
-    [Tooltip("Uniform scale on the model. The X Bot mannequin stands 1.73m crown-to-floor at " +
-             "1, inside a 2m movement capsule — so at 1 it read as a small figure in a big " +
-             "arena, because the world is built around the capsule, not the art. 1.15 makes the " +
-             "crown meet the capsule top, which is the value to hold: the body MATCHES the " +
-             "collider, and the eye height (fixed at the capsule, not the art) lands at the " +
-             "visible head instead of the chest. Push it higher and the head towers above both " +
-             "the capsule and your own eyeline, so looking at another player reads as looking " +
-             "UP at a giant. Hitboxes scale with it either way — a shot lands where the body is " +
-             "seen — so this is purely how big the figure looks against the capsule it is.")]
-    public float modelScale = 1.15f;
+    [Tooltip("Uniform scale on the model. The X Bot mesh is 1.81m tall at 1; 1.3 puts it at " +
+             "2.35m — deliberately TALLER than the 2m movement capsule, for a bigger, more " +
+             "imposing figure. That overshoot used to make the camera feel low, because the eye " +
+             "was pinned near the capsule while the body's head towered above it; PlayerMotor." +
+             "standEyeHeight is raised to 1.8 to compensate, so the viewpoint sits high on the " +
+             "taller body instead of at its chest. Tune the two together — a bigger body wants a " +
+             "higher eye, capped under the 2m capsule so the camera never peeks over cover the " +
+             "hitbox cannot clear. Hitboxes scale with the body, so a shot still lands where it " +
+             "is seen.")]
+    public float modelScale = 1.3f;
 
     [Header("Look")]
     [Tooltip("Emission driven by the player's identity colour, so a body reads as its colour " +
