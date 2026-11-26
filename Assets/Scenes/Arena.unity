@@ -5941,8 +5941,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5238437b163745947ae14e5597ffcbc1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ConnectUI
-  defaultAddress: localhost
-  defaultPort: 7770
+  defaultAddress: projectspeed.playit.plus
+  defaultPort: 1103
   hostBindPort: 7770
 --- !u!114 &1843509056
 MonoBehaviour:

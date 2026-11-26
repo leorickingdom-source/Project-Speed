@@ -158,6 +158,7 @@ public class PlayerBody : MonoBehaviour
     Transform hips, spine, chest, head;
     Transform legLU, legLL, legRU, legRL;
     Transform armLU, armLL, armRU, armRL;
+    static int animDiagLastFrame;  // TEMP: throttle animation-state log, remove after diagnosing
     Quaternion[] bind;          // bind-pose local rotations, so every pose is an OFFSET
     Transform[] bones;
     Vector3 hipsBindPos;        // rest hip height, so the crouch drop is relative to the rig
@@ -320,6 +321,12 @@ public class PlayerBody : MonoBehaviour
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         }
 
+        // The Animator initialised at the prefab's scale of 1, then Attach scaled the transform
+        // to modelScale before this ran. A Humanoid Animator caches its pose against the scale it
+        // woke at, so scaling it afterwards can leave it frozen — which is exactly what happened
+        // when modelScale stopped being 1. Rebind re-initialises it at the scale it is now.
+        anim.Rebind();
+
         hips = anim.GetBoneTransform(HumanBodyBones.Hips);
         spine = anim.GetBoneTransform(HumanBodyBones.Spine);
         chest = anim.GetBoneTransform(HumanBodyBones.Chest);
@@ -439,6 +446,15 @@ public class PlayerBody : MonoBehaviour
         // Damped, because these come off a physics velocity that jitters sub-frame and an
         // undamped tree turns that jitter into visible foot chatter.
         bool haveClips = animator != null && animator.runtimeAnimatorController != null;
+        // TEMP diagnostic: log this body's animation state each ~30 frames while it is MOVING,
+        // with a leg-bone rotation so a frozen vs animating rig is visible in the numbers.
+        if (speed > 1.5f && Time.frameCount - animDiagLastFrame > 30)
+        {
+            animDiagLastFrame = Time.frameCount;
+            float legX = legLU != null ? legLU.localRotation.eulerAngles.x : -1f;
+            Debug.Log($"[BodyAnim] {name} speed={speed:0.0} blend={blend:0.00} animEnabled={(animator != null && animator.enabled)} " +
+                      $"moveZ={local.z:0.0} legUpperX={legX:0.0} haveClips={haveClips}");
+        }
         if (haveClips)
         {
             Vector2 planar = new Vector2(local.x, local.z);

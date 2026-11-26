@@ -30,6 +30,10 @@ public class WeaponView : MonoBehaviour
     const string AutoModel = "NewGun_auto";
     const string SemiModel = "NewGun_semi";
     const string MuzzleFlash = "EasyFPS/muzzelFlash 03";
+    // Screen size of the flash quad. The pack's prefab is ~1 world unit, and the muzzle sits
+    // ~0.4m from the lens, so an unscaled flash filled the whole view. This shrinks it to a
+    // barrel-sized burst; tune here if it wants to be bigger or smaller.
+    const float FlashScale = 0.25f;
 
     // Camera-space poses, taken from the values the pack's own GunScript was authored with
     // rather than eyeballed — they are what the animations were posed against.
@@ -52,11 +56,18 @@ public class WeaponView : MonoBehaviour
     [Header("Feel")]
     [Tooltip("Backward/upward kick applied to the model on each shot, in metres. Purely " +
              "cosmetic — recoil that moved the AIM would be a balance change, and this game " +
-             "has none.")]
-    public float recoilKick = 0.035f;
-    [Tooltip("Seconds for the kick to settle. Shorter than any weapon's cycle so a fast gun " +
-             "still shows a distinct kick per shot instead of one smeared push.")]
-    public float recoilRecover = 0.09f;
+             "has none. Kept small because the viewmodel sits centimetres from a wide-FOV lens " +
+             "(116 default), which magnifies any near-field motion — a kick that reads as a " +
+             "nudge at 60 FOV fills the screen at 116.")]
+    public float recoilKick = 0.010f;
+    [Tooltip("Seconds for the kick to settle. Must stay UNDER the fastest weapon's cycle (the " +
+             "Rifle at 0.11s) or a full-auto gun re-kicks before it recovers and the recoil " +
+             "stacks into a screen-filling strobe instead of a distinct pulse per shot.")]
+    public float recoilRecover = 0.055f;
+    [Tooltip("Fraction of the hip-fire kick that survives while fully aimed. ADS magnifies the " +
+             "world but not the viewmodel, so an undamped kick reads as huge through the zoom " +
+             "and pulls the eye off the target. 0 = dead-still sights, 1 = same kick as hip.")]
+    [Range(0f, 1f)] public float adsRecoilScale = 0.2f;
     [Tooltip("Speed above which the animator plays the lowered-gun RUN pose. Deliberately " +
              "high: everyone in this game moves at 9+ m/s permanently, so a run threshold set " +
              "anywhere near normal speed would lower the gun forever and you would never see " +
@@ -98,6 +109,13 @@ public class WeaponView : MonoBehaviour
     GameObject flash;         // one persistent flash, toggled — not spawned per shot
     Camera overlay;
     PlayerMotor motor;
+
+    // Low-poly path: a STATIC gun mesh instead of the animated pack model. lowPolyKey is the
+    // resource currently loaded (null while on the EasyFPS model); lowRest/lowAim are its
+    // camera-space rest and aim positions, used in place of the pack's Pose(RestPos/AimPos).
+    bool lowPoly;
+    string lowPolyKey;
+    Vector3 lowRest, lowAim;
 
     bool automatic;           // which model is loaded, so Equip can skip a redundant reload
     bool loaded;
@@ -177,10 +195,11 @@ public class WeaponView : MonoBehaviour
     {
         if (!show) { if (model != null) model.gameObject.SetActive(false); return; }
 
-        if (!loaded || automatic != isAutomatic)
+        if (!loaded || automatic != isAutomatic || lowPoly)
         {
             LoadModel(isAutomatic);
             automatic = isAutomatic;
+            lowPoly = false; lowPolyKey = null;   // back on the animated pack model
         }
         if (model == null) return;
         model.gameObject.SetActive(true);
@@ -242,6 +261,87 @@ public class WeaponView : MonoBehaviour
         loaded = true;
     }
 
+    // Show a static low-poly gun (no hands, no animator) in place of the pack model. The four
+    // transforms come from the Weapon def and are tuned per gun; everything else — recoil, the
+    // aim lerp, the muzzle flash and tracer — runs unchanged because it only ever touches
+    // position and the muzzle point, both of which this sets up.
+    public void EquipLowPoly(string path, Vector3 scale, Vector3 euler, Vector3 pos, Vector3 muzzleLocal, bool show)
+    {
+        if (!show) { if (model != null) model.gameObject.SetActive(false); return; }
+
+        if (!loaded || !lowPoly || lowPolyKey != path)
+        {
+            LoadLowPoly(path, scale, euler, muzzleLocal);
+            lowPoly = true; lowPolyKey = path;
+        }
+        if (model == null) return;
+        model.gameObject.SetActive(true);
+        lowRest = pos;
+        lowAim = pos;   // light-zoom weapon: no distinct ADS pose in the pilot
+    }
+
+    void LoadLowPoly(string path, Vector3 scale, Vector3 euler, Vector3 muzzleLocal)
+    {
+        if (cam == null) return;
+        if (model != null) Destroy(model.gameObject);
+        model = null; animator = null; muzzle = null; flash = null;
+
+        var prefab = Resources.Load<GameObject>(path);
+        if (prefab == null) { loaded = true; return; }  // mesh missing; everything else works
+
+        var holder = new GameObject("ViewmodelHolder");
+        holder.SetActive(false);
+        var inst = Instantiate(prefab, holder.transform);
+
+        // Static mesh: nothing to keep but the renderers. Strip any importer scripts, audio and
+        // colliders, exactly as the pack path does.
+        foreach (var mb in inst.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null) DestroyImmediate(mb);
+        foreach (var a in inst.GetComponentsInChildren<AudioSource>(true)) DestroyImmediate(a);
+        foreach (var c in inst.GetComponentsInChildren<Collider>(true)) DestroyImmediate(c);
+
+        // Texture the gun WITHOUT swapping shaders. The FBX's own material is blank but
+        // pipeline-correct (it rendered white, not magenta); the pack's standalone .mat uses the
+        // built-in Standard shader, which is magenta under URP — so keep the working material and
+        // just inject the pack's maps. Set both the URP (_BaseMap) and built-in (_MainTex) slots so
+        // it lights whichever the active shader expects. r.material auto-instances per gun.
+        Texture diffuse = Resources.Load<Texture>(path + "_diffuse");
+        Texture normal = Resources.Load<Texture>(path + "_normal");
+        foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+        {
+            var m = r.material;
+            if (diffuse != null)
+            {
+                m.SetTexture("_BaseMap", diffuse);
+                m.SetTexture("_MainTex", diffuse);
+                m.color = Color.white;
+            }
+            if (normal != null && m.HasProperty("_BumpMap"))
+            {
+                m.SetTexture("_BumpMap", normal);
+                m.EnableKeyword("_NORMALMAP");
+            }
+        }
+
+        // No muzzle bone on a static mesh — make one at the barrel tip (model-local, tunable).
+        var mz = new GameObject("muzzelSpawn").transform;
+        mz.SetParent(inst.transform, false);
+        mz.localPosition = muzzleLocal;
+        muzzle = mz;
+
+        animator = null;                       // static: WeaponView's animator calls all no-op
+        SetLayer(inst.transform, ViewmodelLayer);
+
+        inst.transform.SetParent(cam, false);
+        inst.transform.localRotation = Quaternion.Euler(euler);
+        inst.transform.localScale = scale;
+
+        model = inst.transform;
+        Destroy(holder);
+
+        BuildFlash();
+        loaded = true;
+    }
+
     // One flash, built once and toggled. The pack instantiates a fresh prefab per shot and
     // destroys it 0.8s later; at the SMG's fire rate that is a steady stream of garbage for a
     // quad that is on screen for one frame.
@@ -270,7 +370,7 @@ public class WeaponView : MonoBehaviour
         {
             // Re-rolled each shot so a burst does not look like one frame repeated.
             flash.transform.localRotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
-            flash.transform.localScale = Vector3.one * Random.Range(0.85f, 1.25f);
+            flash.transform.localScale = Vector3.one * (FlashScale * Random.Range(0.85f, 1.25f));
             flash.SetActive(true);
             flashUntil = Time.time + 0.045f;
         }
@@ -282,22 +382,51 @@ public class WeaponView : MonoBehaviour
     public void Melee() => meleeUntil = Time.time + 0.12f;
     public void SetAiming(bool on) => aiming = on;
 
-    // Third person turns the viewmodel off. It is drawn by an overlay camera pinned to the
-    // view rather than positioned in the world, so from behind the player it would hang in
-    // mid-air in front of the lens instead of in their hands.
-    // Only the overlay camera is touched. It is the sole thing that draws the viewmodel layer —
-    // the world camera has that layer stripped from its mask — so switching it off hides the
-    // viewmodel completely, and Equip keeps sole ownership of whether a gun is in hand at all.
-    // Reaching in to toggle the model here would put a rifle back in a knife player's hands.
+    // Two independent reasons the viewmodel can be hidden — third person (SetShown) and a full
+    // scope being aimed (SetScopeHidden) — composed so neither clobbers the other. Both act only
+    // on the overlay camera, the sole thing that draws the viewmodel layer (the world camera has
+    // that layer stripped from its mask), so turning it off hides the gun, hands and flash
+    // completely while Equip keeps sole ownership of whether a gun is in hand at all.
+    bool shownExternal = true;   // third person
+    bool scopeHidden;            // a true scope is up
+
+    // Third person turns the viewmodel off: it is pinned to the view, not placed in the world,
+    // so from behind the player it would hang in mid-air in front of the lens.
     public void SetShown(bool on)
     {
-        if (overlay != null) overlay.enabled = on;
+        shownExternal = on;
+        ApplyOverlay();
+    }
+
+    // A full scope (the sniper) hides the gun while aimed — the banded scope overlay owns the
+    // screen and the viewmodel would only poke through the letterbox. Kept separate from SetShown
+    // so leaving the scope never forces the gun back on when third person had turned it off.
+    public void SetScopeHidden(bool hidden)
+    {
+        scopeHidden = hidden;
+        ApplyOverlay();
+    }
+
+    void ApplyOverlay()
+    {
+        if (overlay != null) overlay.enabled = shownExternal && !scopeHidden;
     }
 
     // Whether there is actually a gun on screen right now. False for the melee weapons, and
     // false when the art pack is not installed — both cases where KnifeView's blade is the
     // only thing that can show a swing.
     public bool Visible => model != null && model.gameObject.activeSelf;
+
+    // World position of the gun's muzzle bone, so a tracer can leave the BARREL instead of the
+    // camera. The viewmodel is posed in camera space, so this bone sits ~0.4m in front of the eye
+    // and off to the gun's side — a real world point even though an overlay draws the mesh. False
+    // when no gun is on screen (melee, art pack missing): the caller falls back to an eye origin.
+    public bool TryMuzzlePoint(out Vector3 point)
+    {
+        if (muzzle != null && Visible) { point = muzzle.position; return true; }
+        point = default;
+        return false;
+    }
 
     // Reload is polled from the controller rather than pulsed, so a reload cancelled by death
     // or a weapon swap cannot leave the hands winding a magazine forever. `seconds` is the
@@ -320,9 +449,14 @@ public class WeaponView : MonoBehaviour
         // Pose: rest <-> aim, plus a decaying kick straight back down the barrel.
         aim01 = Mathf.MoveTowards(aim01, aiming ? 1f : 0f,
                                   Time.deltaTime / Mathf.Max(0.01f, AimTime));
-        Vector3 pos = Vector3.Lerp(Pose(RestPos), Pose(AimPos), aim01);
+        Vector3 pos = lowPoly ? Vector3.Lerp(lowRest, lowAim, aim01)
+                              : Vector3.Lerp(Pose(RestPos), Pose(AimPos), aim01);
         float kick = recoilUntil > Time.time
             ? (recoilUntil - Time.time) / Mathf.Max(0.001f, recoilRecover) : 0f;
+        // Damp the kick as the sights come up: the ADS zoom magnifies the world but not the
+        // viewmodel, so the hip-fire kick reads as far larger through the scope and yanks the eye
+        // off target. aim01 is 0 at the hip, 1 fully aimed.
+        kick *= Mathf.Lerp(1f, adsRecoilScale, aim01);
         pos += new Vector3(0f, kick * recoilKick * 0.35f, -kick * recoilKick);
         model.localPosition = pos;
 

@@ -24,9 +24,33 @@ public class Weapon
 
     [Header("Hitscan")]
     public int pellets = 1;            // >1 = spread shot
-    public float spreadDegrees = 0f;
+    public float spreadDegrees = 0f;   // base cone: what a tapped / first shot uses
     public float range = 200f;
     public Color tracer = Color.white;
+
+    [Header("Spread bloom (CS/Valorant tap accuracy)")]
+    // A tapped shot fires at spreadDegrees; while you keep firing the live cone climbs by
+    // spreadBloomPerShot each shot up to spreadMaxDegrees, then recovers by spreadRecoverPerSec
+    // once the trigger rests. Default OFF — spreadMaxDegrees 0 leaves the weapon on its fixed
+    // spreadDegrees cone, so the shotgun pattern and the pinpoint revolver/sniper are unchanged;
+    // only a weapon that opts in rewards tapping and punishes holding.
+    public float spreadMaxDegrees = 0f;
+    public float spreadBloomPerShot = 0f;
+    public float spreadRecoverPerSec = 0f;
+
+    // True when sustained fire should open this weapon's cone.
+    public bool Blooms => spreadMaxDegrees > spreadDegrees && spreadBloomPerShot > 0f;
+
+    [Header("Low-poly viewmodel (optional)")]
+    // Resources path of a STATIC low-poly gun mesh to show instead of the animated EasyFPS
+    // auto/semi viewmodel. Null/empty = keep the pack model. Gun-only (no hands, no reload/walk
+    // animation), but recoil, bloom, the ADS scope-hide and the muzzle-origin tracer all still
+    // apply. The four transforms below place and size it — camera-space, tuned per gun.
+    public string lowPolyModel = null;
+    public Vector3 lowPolyScale = new Vector3(0.14f, 0.14f, 0.14f);
+    public Vector3 lowPolyEuler = new Vector3(0f, 0f, 0f);    // pack barrel is native +Z = forward
+    public Vector3 lowPolyPos = new Vector3(0.15f, -0.18f, 0.42f);
+    public Vector3 lowPolyMuzzle = new Vector3(3f, 0f, 0f);   // barrel tip in MODEL-local units
 
     [Tooltip("Per-weapon headshot multiplier. 0 = use WeaponController.headMultiplier. Exists " +
              "so one weapon's headshot can be tuned without touching every other weapon's — " +
@@ -281,6 +305,11 @@ public class WeaponController : MonoBehaviour
     HitFeedback feedback;                    // owner-only shot confirmation
     PlayerAudio audioFx;
     TracerRenderer tracers;                  // stays active on remote players too
+
+    // Live hitscan cone for weapons that bloom (Weapon.Blooms). Climbs per shot, recovers when
+    // the trigger rests, and is reset to the weapon's base cone on every swap (SyncGunView).
+    float spreadCur;
+    float lastFireAt = -999f;
     PlayerHealth health;                     // gates firing: the dead do not shoot
     readonly RaycastHit[] rayHits = new RaycastHit[16];
 
@@ -377,7 +406,12 @@ public class WeaponController : MonoBehaviour
         if (gunView == null) return;
         var w = CurrentWeapon;
         bool melee = w != null && w.kind == FireKind.Melee;
-        gunView.Equip(w != null && w.automatic, !melee);
+        if (w != null && !string.IsNullOrEmpty(w.lowPolyModel))
+            gunView.EquipLowPoly(w.lowPolyModel, w.lowPolyScale, w.lowPolyEuler, w.lowPolyPos, w.lowPolyMuzzle, !melee);
+        else
+            gunView.Equip(w != null && w.automatic, !melee);
+        // A freshly drawn weapon starts on its base cone — no bloom carried over from the last gun.
+        spreadCur = w != null ? w.spreadDegrees : 0f;
     }
 
     static Weapon[] DefaultLoadout() => new[]
@@ -421,7 +455,14 @@ public class WeaponController : MonoBehaviour
                      magSize = 6, reloadTime = 1.4f },
         // Rifle: honest all-rounder, mild taper so it never dominates the sniper lane.
         new Weapon { name = "Rifle",  kind = FireKind.Hitscan, automatic = true,  cycle = 0.11f,
-                     damage = 14f, pellets = 1, spreadDegrees = 1.5f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
+                     damage = 14f, pellets = 1, spreadDegrees = 0.3f, range = 200f, tracer = new Color(1.00f, 0.80f, 0.35f),
+                     // CS/Valorant feel: a tap lands on a 0.3° cone; a held spray blooms to the 3°
+                     // cap over ~5 rounds and recovers in ~0.4s once you let go. Bloom-per-shot MUST
+                     // beat the recovery across one cycle (7°/s * 0.11s = 0.77°) or full-auto
+                     // recovers faster than it climbs and the cone never opens — which is exactly
+                     // what 0.55 did (looked right on paper, stayed a laser at range). Net at 1.3:
+                     // +1.3 bloom − 0.77 recover = +0.53°/shot, so ~5 held rounds reach 3°.
+                     spreadMaxDegrees = 3.0f, spreadBloomPerShot = 1.3f, spreadRecoverPerSec = 7f,
                      nearDistance = 45f, nearMultiplier = 1f, farDistance = 90f, farMultiplier = 0.7f,
                      // Same light zoom as the Revolver: the Rifle is the all-rounder, so it
                      // should be able to take a considered shot at 60m without being handed
@@ -648,6 +689,10 @@ public class WeaponController : MonoBehaviour
         if (gunView != null)
         {
             gunView.SetAiming(Scoped);
+            // Hide the whole viewmodel under a TRUE scope (the sniper): the banded overlay owns
+            // the screen and the gun would only poke through the letterbox. The <=45° test matches
+            // SpeedHud's scope-overlay threshold, so the gun vanishes exactly when the glass appears.
+            gunView.SetScopeHidden(Scoped && w != null && w.scopeFov <= 45f);
             gunView.SetReloading(Reloading, w != null ? w.reloadTime : 0f);
         }
 
@@ -941,12 +986,35 @@ public class WeaponController : MonoBehaviour
         Vector3 origin = aim.position;
         int shots = Mathf.Max(1, w.pellets);
         float scale = DamageScale; // sampled once per shot, so every pellet of a spread agrees
+
+        // The RAY still leaves the eye — that is where the player is aiming and must not move.
+        // Only the visible tracer starts at the muzzle, so a shot reads as leaving the barrel
+        // rather than the bridge of your nose. Falls back to an eye-relative point when there is
+        // no gun on screen (melee, or the art pack absent).
+        Vector3 tracerFrom = (gunView != null && gunView.TryMuzzlePoint(out var muzzlePoint))
+            ? muzzlePoint : origin - aim.up * 0.15f;
+
+        // The cone this trigger pull fires at. A bloom weapon recovers toward its base cone by
+        // however long the trigger rested, fires at that, then climbs one step — so tapping and
+        // short bursts stay near the base while a held spray opens up. Fixed-cone weapons ignore
+        // all of this and use spreadDegrees straight. Computed once per pull, so every pellet of a
+        // shotgun agrees, exactly as scale is sampled once above.
+        float coneNow;
+        if (w.Blooms)
+        {
+            spreadCur = Mathf.Max(w.spreadDegrees, spreadCur - w.spreadRecoverPerSec * (Time.time - lastFireAt));
+            coneNow = spreadCur;
+            spreadCur = Mathf.Min(w.spreadMaxDegrees, spreadCur + w.spreadBloomPerShot);
+        }
+        else coneNow = w.spreadDegrees;
+        lastFireAt = Time.time;
+
         for (int i = 0; i < shots; i++)
         {
             Vector3 dir = aim.forward;
-            if (w.spreadDegrees > 0f)
+            if (coneNow > 0f)
             {
-                Vector2 off = Random.insideUnitCircle * Mathf.Tan(w.spreadDegrees * Mathf.Deg2Rad);
+                Vector2 off = Random.insideUnitCircle * Mathf.Tan(coneNow * Mathf.Deg2Rad);
                 dir = (aim.forward + aim.right * off.x + aim.up * off.y).normalized;
             }
             Vector3 end = origin + dir * w.range;
@@ -970,7 +1038,7 @@ public class WeaponController : MonoBehaviour
                 if (hp != null) ImpactFx.Blood(hit.point, hit.normal);
                 else ImpactFx.Hole(hit.point, hit.normal);
             }
-            Tracer(origin - aim.up * 0.15f, end, w.tracer);
+            Tracer(tracerFrom, end, w.tracer);
         }
     }
 

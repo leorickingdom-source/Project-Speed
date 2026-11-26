@@ -9,20 +9,19 @@
 public static class LoadoutChoice
 {
     // Index into Names / SlotIndices below — NOT directly into WeaponController.weapons.
-    // 0 = Revolver, the default starter now that the Rifle is shelved.
+    // 0 = Revolver, the default starter.
     public static int WeaponIndex = 0;
 
-    // Rifle and SMG SHELVED 2026-07-26: the semi-autos are the picks that feel rewarding, and
-    // the two full-autos were the ones that could win a fight without ever committing to a
-    // shot. Both weapons stay in WeaponController.weapons at their original slots (1 and 3) —
-    // this is a MENU change only, so nothing that stores a weapons[] index moves, the pickup
-    // and objective slots keep their numbers, and restoring either is putting its name and
-    // slot back into these two arrays.
+    // SMG SHELVED 2026-07-26: the full-auto could win a fight without ever committing to a
+    // shot. It stays in WeaponController.weapons at its original slot (3) — this is a MENU
+    // change only, so nothing that stores a weapons[] index moves, the pickup and objective
+    // slots keep their numbers, and restoring it is putting its name and slot back into these
+    // two arrays. The Rifle was shelved alongside it on 2026-07-26 and RESTORED 2026-08-25.
     // Knife SHELVED 2026-08-06: melee became a universal action on its own key (see
     // WeaponController.TryQuickMelee) rather than a loadout that traded away your gun. Shelved
     // the same way the Rifle and SMG were -- the weapon keeps its slot in weapons[], so the
     // oddball swap, the viewmodel and every stored index still mean what they meant.
-    public static readonly string[] Names = { "Revolver", "Sniper", "Shotgun", "Rocket" };
+    public static readonly string[] Names = { "Revolver", "Rifle", "Sniper", "Shotgun", "Rocket" };
 
     // Where each choice lives in WeaponController.weapons. Mapped rather than assumed, so a
     // shelved entry — or another appended weapon — cannot silently shift what a menu position
@@ -30,7 +29,7 @@ public static class LoadoutChoice
     static readonly int[] SlotIndices =
     {
         0,                                  // Revolver
-        // 1,                               // Rifle    — shelved
+        1,                                  // Rifle
         2,                                  // Sniper
         // 3,                               // SMG      — shelved
         4,                                  // Shotgun

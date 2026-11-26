@@ -152,7 +152,7 @@ public class PlayerMotor : MonoBehaviour
     // the body is scaled up past the capsule for presence, and the viewpoint has to rise with it
     // or you look out of the chest of a giant (the "camera is low" complaint). Capped under the
     // 2m capsule top so the eye never sees over cover the hitbox cannot clear.
-    public float standEyeHeight = 1.8f;
+    public float standEyeHeight = 1.9f;
     [Tooltip("The visible body, scaled to match the crouch so other players see the stance " +
              "they are shooting at. Auto = the child named \"Body\".")]
     public Transform body;                 // visual capsule (auto = child "Body")

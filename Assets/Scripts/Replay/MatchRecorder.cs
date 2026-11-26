@@ -100,7 +100,7 @@ public class MatchRecorder : MonoBehaviour
 
     void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(this); return; }
+        if (Instance != null && Instance != this) { enabled = false; Destroy(this); return; }
         Instance = this;
         int cap = Mathf.Max(8, Mathf.CeilToInt(bufferSeconds * sampleRate));
         ring = new Frame[cap];
@@ -122,6 +122,11 @@ public class MatchRecorder : MonoBehaviour
     // behind the body it describes.
     void LateUpdate()
     {
+        // A duplicate recorder (two placed in a scene, or one left behind across a domain reload)
+        // early-returns from Awake before it allocates the ring. Without this guard its LateUpdate
+        // threw a NullReferenceException every frame and flooded the console — which also left Play
+        // of the Game blank. The real recorder owns Instance and has a ring; duplicates bail here.
+        if (ring == null) return;
         if (Time.time >= nextScanAt) { Rescan(); nextScanAt = Time.time + 0.5f; }
         if (Time.time >= nextSampleAt) { Capture(); nextSampleAt = Time.time + 1f / Mathf.Max(1f, sampleRate); }
         Materialise();

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // Radial blast: knocks back the player (rocket jump) and damages anything with
@@ -38,24 +39,50 @@ public static class Explosion
         BlastFx.Spawn(center, radius);
 
         Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
+
+        // Collapse every collider to the entity behind it BEFORE applying anything. A humanoid body
+        // is a capsule plus a whole skeleton of bone hitboxes (PlayerBody.BuildHitboxes), and all of
+        // them resolve to ONE PlayerMotor and ONE Health. Without this grouping the loop shoved and
+        // damaged once PER BONE in range: a rocket jump multiplied its own kick by however many
+        // limbs the blast could see and threw you through the ceiling, and splash damage stacked the
+        // same way. Keyed by transform.root — every part of a player shares it; a lone destructible
+        // has it to itself.
+        var targets = new Dictionary<Transform, Target>();
         foreach (var c in hits)
         {
             if (!HasLineOfSight(center, c, blockMask)) continue; // behind cover — no damage, no shove
 
-            Vector3 to = c.bounds.center - center;
+            Transform root = c.transform.root;
+            float d = (c.bounds.center - center).magnitude;
+            if (targets.TryGetValue(root, out var existing))
+            {
+                // Keep the closest part that can see the blast — it drives falloff and shove dir.
+                if (d < existing.dist) { existing.dist = d; existing.center = c.bounds.center; targets[root] = existing; }
+                continue;
+            }
+
+            var motor = c.GetComponentInParent<PlayerMotor>();
+            var hp = c.GetComponentInParent<IDamageable>();
+            if (motor == null && hp == null) continue; // world geometry took the trace — nothing to hit
+
+            targets[root] = new Target { dist = d, center = c.bounds.center, motor = motor, hp = hp, root = root };
+        }
+
+        Transform ownerRoot = owner != null ? owner.transform.root : null;
+        foreach (var t in targets.Values)
+        {
+            Vector3 to = t.center - center;
             float dist = to.magnitude;
             Vector3 dir = dist > 0.01f ? to / dist : Vector3.up;
             // Bias upward so blasts launch you instead of skidding along the floor.
             dir = (dir + Vector3.up * 0.5f).normalized;
             float falloff = 1f - Mathf.Clamp01(dist / radius);
-            bool self = owner != null && c.transform.IsChildOf(owner.transform);
+            bool self = ownerRoot != null && t.root == ownerRoot;
 
-            var motor = c.GetComponentInParent<PlayerMotor>();
-            if (motor != null)
-                motor.AddImpulse(dir * (self ? selfForce : force) * (0.35f + 0.65f * falloff));
+            if (t.motor != null)
+                t.motor.AddImpulse(dir * (self ? selfForce : force) * (0.35f + 0.65f * falloff));
 
-            var hp = c.GetComponentInParent<IDamageable>();
-            if (hp != null)
+            if (t.hp != null)
             {
                 // Name the shooter before the damage lands, so a lethal blast is a credited
                 // kill in the feed rather than "X died". Not for self-hits: your own rocket
@@ -63,7 +90,7 @@ public static class Explosion
                 // Only sticks where the write sticks — on the authority — same as the damage.
                 if (!self && owner != null)
                 {
-                    var victimHealth = hp as PlayerHealth;
+                    var victimHealth = t.hp as PlayerHealth;
                     var ownerNob = owner.GetComponent<FishNet.Object.NetworkObject>();
                     if (victimHealth != null && ownerNob != null)
                         victimHealth.RecordServerAttacker(ownerNob, KillKind.Normal);
@@ -74,9 +101,19 @@ public static class Explosion
                 // pick: in a game with no regen, the launcher's mobility was rationed by
                 // attrition rather than by skill.
                 float selfScale = self ? selfDamageScale * SelfDamagePassiveScale(owner) : damageScale;
-                hp.Damage(damage * falloff * selfScale);
+                t.hp.Damage(damage * falloff * selfScale);
             }
         }
+    }
+
+    // One blast target, after a humanoid's many colliders are collapsed to the entity behind them.
+    struct Target
+    {
+        public float dist;      // blast → closest part that has line of sight
+        public Vector3 center;  // that part's bounds centre — drives shove direction and falloff
+        public PlayerMotor motor;
+        public IDamageable hp;
+        public Transform root;
     }
 
     // How much of your own blast Kinetic Plating lets through. Looked up per blast rather than
